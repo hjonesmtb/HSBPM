@@ -1,0 +1,10 @@
+[Unit]
+Description=TRIUMF Diagnostics: BPM Server
+
+[Service]
+Type=simple
+WorkingDirectory=/home/root
+ExecStart=/home/root/BPMserver 22044
+
+[Install]
+WantedBy=multi-user.target
