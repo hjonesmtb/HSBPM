@@ -22,10 +22,10 @@ module self_trigger(
 	parameter CLK_T = 400 ;// clk is 2.5Mhz, ~400 ns period 
 	
 	parameter HOLD_TIME_ms = 4; //for CW beam signal, this will make trig every 4 ms.
-   parameter HOLD_TIME = HOLD_TIME_ms*1000000/CLK_T;  
+   parameter HOLD_TIME = HOLD_TIME_ms*1000000/CLK_T;  // number of clock cycles
    
 	parameter NO_BEAM_ms = 1000; //ms, if not trig for this period, assert No_beam.
-	parameter NO_BEAM_TIME = NO_BEAM_ms*1000000/CLK_T;   
+	parameter NO_BEAM_TIME = NO_BEAM_ms*1000000/CLK_T;   // number of clock cycles
 	
 	parameter state_idle = 0,
              state_transition = 1, 

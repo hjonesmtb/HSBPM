@@ -35,6 +35,7 @@ module calculate_position(
 	input [SF_WIDTH-1:0] IIR_OUT_K2, //LPF K2, fp
 	input [DATA_WIDTH-1:0] CH0_ADC_OFFSET,//offset adjust, ADC counts (HJ Nov 27,2023)
 	input [DATA_WIDTH-1:0] CH1_ADC_OFFSET,//offset adjust, ADC counts (HJ Nov 27,2023)
+	input enable_avg,
 	
 	output [SF_WIDTH-1:0] A_comp,
 	output [SF_WIDTH-1:0] B_comp,
@@ -119,7 +120,7 @@ altfp_mul mul_inst2 (.dataa(fp_X_OFFSET), .datab(fpdot001), .clock(clk), .result
 altfp_add add_inst4(.dataa(D), .datab(fpOFFSETmm), .clock(clk), .result(fp_pos_mm) );// fp position in mm
 
 //16 bit DAC value, +/-10V, 1mm/V, or 10mm/V
-altfp_mul mul_inst3 (.dataa(fp_pos_mm_LPF), .datab(kdac), .clock(clk), .result(fp_pos_dac) );  
+altfp_mul mul_inst3 (.dataa(fp_pos_mm), .datab(kdac), .clock(clk), .result(fp_pos_dac) );  
 altfp_fp2int fp2int_inst3(.dataa(fp_pos_dac), .clock(clk), .result(position));
 
 // Tc = tao*T = [-1/ln(K2)] * T
@@ -132,13 +133,15 @@ altfp_fp2int fp2int_inst3(.dataa(fp_pos_dac), .clock(clk), .result(position));
 // K2 = 0.999, Tc = [-1/ln(0.999)] * 400ns = 400 us; 0.4 KHz
 // K2 = 0.9995, Tc = [-1/ln(0.999)] * 400ns = 800 us; 0.2 KHz
 
-LPF_IIR LPF_output_inst0(
+LPF_IIR LPF_output_inst0( 
     .FCLK(clk),
     .in_valid(1'b1), //
 	 .data_in(fp_pos_mm),
 	 .K2(IIR_OUT_K2),
     .data_out(fp_pos_mm_LPF) //
     );
+
+
  
 endmodule
 
