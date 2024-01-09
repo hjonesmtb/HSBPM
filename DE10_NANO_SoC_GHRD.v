@@ -787,6 +787,7 @@ FIR BPF1(
     .data_out(Ch1_Din_FIR)
     );	 
 
+
 assign Ch0_Din = ena_avg? Ch0_Din_FIR: {Ch0_ADC_DATA[13],Ch0_ADC_DATA[13],Ch0_ADC_DATA};
 assign Ch1_Din = ena_avg? Ch1_Din_FIR: {Ch1_ADC_DATA[13],Ch1_ADC_DATA[13],Ch1_ADC_DATA};
 

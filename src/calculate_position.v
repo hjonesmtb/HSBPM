@@ -105,7 +105,7 @@ altfp_16int2fp int2fpconv_inst4 (.dataa(CH0_ADC_OFFSET), .clock(clk), .result(fp
 altfp_16int2fp int2fpconv_inst5 (.dataa(CH1_ADC_OFFSET), .clock(clk), .result(fpCH1_OFFSET)); // to floating point
 
 //compensate gain
-altfp_mul mul_inst4 (.dataa(ch0_Amp), .datab(FP_CH0_NF), .clock(clk), .result(A_gained) ); // ajust gain
+altfp_mul mul_inst4 (.dataa(ch0_Amp), .datab(FP_CH0_NF), .clock(clk), .result(A_gained) ); // ajust gain. This could be done in fixed point.
 altfp_mul mul_inst5 (.dataa(ch1_Amp), .datab(FP_CH1_NF), .clock(clk), .result(B_gained) ); //  
 
 altfp_add add_inst1 (.dataa(A_gained), .datab(fpCH0_OFFSET), .clock(clk), .result(A_comp));// offset

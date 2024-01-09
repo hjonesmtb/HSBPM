@@ -12,7 +12,7 @@ module FIR(
 	reg signed [13:0] delay_pipeline[14:0];
 	
 	// define coef
-	wire signed [15:0]  coef[14:0];
+	wire signed [15:0]  coef[14:0]; // FIR taps, multiplied by 2^15
 	assign coef[0] = 833;
 	assign coef[1] = 856;
 	assign coef[2] = -3016;
