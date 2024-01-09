@@ -13,7 +13,7 @@
 
 //parameter FPGA_VERSION_NO = 32'd20221018; //nn_yyyy_mm_dd: AETE nn=00;
 //parameter FPGA_VERSION_NO = 32'd0047; //verification
-parameter FPGA_VERSION_NO = 32'd20231218; // Modified on Dec 13, 2023
+parameter FPGA_VERSION_NO = 32'd20240108; // Modified on jan 08, 2024
 
 module DE10_NANO_SoC_GHRD(
 
@@ -87,11 +87,11 @@ module DE10_NANO_SoC_GHRD(
     output              HPS_USB_STP,
 
 	 //////////// GPIO //////////
-	 //DAC
-	 input GPIO_1_0,  //DAC_SDO
-	 output GPIO_1_1, //DAC_SDI
-	 output GPIO_1_2, //DAC_SCLK
-	 output GPIO_1_3, //DAC_CSn
+	 
+	 input GPIO_1_0,  // Trigger
+	 output GPIO_1_1, //
+	 output GPIO_1_2, //
+	 output GPIO_1_3, //
 
 	 output GPIO_1_4, //VGA_GAIN_A1
 	 output GPIO_1_7, //VGA_GAIN_A0
@@ -234,19 +234,12 @@ assign stm_hw_events = {{15{1'b0}}, SW, fpga_led_internal, fpga_debounced_button
 
 /////////////////// GPIO pin mapping ://///////////////////////////////////////////////////////////////////
 //GPIO mapping start:
-wire ext_trigger = GPIO_0_28;	 
+wire ext_trigger = GPIO_1_0;	 
 wire LED_RUNNING;
 wire LED_Fault = Cold_Reset_Req;
 wire Cold_Reset_Req = ~GPIO_0_32;  //cold reset push button from front panel 
 assign GPIO_0_34 = LED_RUNNING;  //LED_COMM, indicating communication activity, not implemented yet.
 assign GPIO_0_35 = LED_Fault;  //should response to reset_push button action? 
-
-//DAC interface
-wire DAC_SDO,DAC_SDI,DAC_SCLK,DAC_CSn;
-assign DAC_SDO = GPIO_1_0;
-assign GPIO_1_1 = DAC_SDI;
-assign GPIO_1_2 = DAC_SCLK;
-assign GPIO_1_3 = DAC_CSn;
 
 wire VGA_GAIN_A1,VGA_GAIN_A0;
 assign GPIO_1_4 = VGA_GAIN_A1;
@@ -579,10 +572,10 @@ wire waveform_select = `CON_REG_L[4];
 wire Ena_ST = `CON_REG_L[6];
 wire auto_trig_sel = `CON_REG_L[7];
 
-wire ena_avg = `CON_REG_H[1]; //enable moving average
+wire ena_avg = `CON_REG_H[1]; //enable input FIR
 wire is10mmpV = `CON_REG_H[2]; //DAC ratio: 10mm /V, or 1mm/V
 wire [1:0] AVG_select = `CON_REG_H[4:3]; //Averaging times: 4,16,32, 64 four selections
-wire [1:0] LPF_select = `CON_REG_H[6:5]; //Output LPF K2: 0.1,0.9,0.99,0.999
+wire ena_gain = `CON_REG_H[5]; //Choose FIR gain. 1 for 4x, 0 for 1x.
 
 wire pulse1KHz,auto_trig; 
 wire DAC_update = trig; //changed from auto_trig. HJ Nov 29, 2023
@@ -772,22 +765,31 @@ self_trigger self_trigger_inst(
 	
 );
 
-//self_trigger_simple self_trigger_inst(
-//	.signal(Amp_avg), 
-//	.threshold(`TRIG_TH),
-//	.transition(`TRANSITION),	
-//	.clk(DCLK), //SCLK
-//	.reset(SYS_RST),
-//	.no_beam(No_beam), //if not triggered for 1 seconds, assert this signal.
-//	.gate(gate), //window during which the signal is above the TRIG_TH
-//	.all_trig(bpm_trig) //one clk pulse
-//	
-//);
 
 //================ processing ==============
+wire [DATA_WIDTH-1:0] Ch0_Din_FIR, Ch1_Din_FIR;
+wire [DATA_WIDTH-1:0] Ch0_Din/*synthesis keep*/;
+wire [DATA_WIDTH-1:0] Ch1_Din/*synthesis keep*/; 
 
-wire [DATA_WIDTH-1:0] Ch0_Din = {Ch0_ADC_DATA[13],Ch0_ADC_DATA[13],Ch0_ADC_DATA}/*synthesis keep*/;
-wire [DATA_WIDTH-1:0] Ch1_Din = {Ch1_ADC_DATA[13],Ch1_ADC_DATA[13],Ch1_ADC_DATA}/*synthesis keep*/; 
+FIR BPF0(
+    .clk(SCLK),
+    .reset(SYS_RST),
+	 .ena_gain(ena_gain), // this sig should come from DDC output
+    .data_in(Ch0_ADC_DATA),
+    .data_out(Ch0_Din_FIR)
+    );
+
+FIR BPF1(
+    .clk(SCLK),
+    .reset(SYS_RST),
+	 .ena_gain(ena_gain), // this sig should come from DDC output
+    .data_in(Ch1_ADC_DATA),
+    .data_out(Ch1_Din_FIR)
+    );	 
+
+assign Ch0_Din = ena_avg? Ch0_Din_FIR: {Ch0_ADC_DATA[13],Ch0_ADC_DATA[13],Ch0_ADC_DATA};
+assign Ch1_Din = ena_avg? Ch1_Din_FIR: {Ch1_ADC_DATA[13],Ch1_ADC_DATA[13],Ch1_ADC_DATA};
+
 wire [DATA_WIDTH-1:0] Ch2_Din = {Ch2_ADC_DATA[13],Ch2_ADC_DATA[13],Ch2_ADC_DATA};
 wire [DATA_WIDTH-1:0] Ch3_Din = {Ch3_ADC_DATA[13],Ch3_ADC_DATA[13],Ch3_ADC_DATA}; 
 
@@ -852,23 +854,6 @@ wire [SF_WIDTH-1:0] max_A,max_B,min_A,min_B/*synthesis keep*/;
 wire [DATA_WIDTH-1:0] Xdac, Ydac/* synthesis keep */; //16 bit position signed, two's complement. Modified (removed sign) Nov 23,2023
 wire signed [DATA_WIDTH-1:0] X_Position, Y_Position; //16 bit position signed, two's complement.
 
-assign Xdac = (X_Position[DATA_WIDTH-1])? (X_Position + 16'sh8000) : (X_Position + 16'h8000); // shift the 2's comp to > 0. HJ Nov 24
-
-DAC DAC_inst // Added on Nov 21, 2023
-    (
-        // Signals to DAC 
-        .sdi(DAC_SDI),   // SPI data to DAC
-        .sclk(DAC_SCLK),   // SPI_CLK to DAC, less than 50 MHz                                                     
-        .ss(DAC_CSn),     // start 
-                                                       
-        // Signals to/from system
-		  .code({4'b0010,4'b0000,Xdac}), // write to DAC A (Xpos)
-        .clk(SCLK),                                                         
-        .rst(SYS_RST),
-		  .update(DAC_update)  //1 clk pulse
-    );
-	 
-
 wire maxmin_rst; //for debug use, to clear the maxmin register
 //the fifo_clr_reg is one clk SYS_CLK, needs to be streched to one DCLK 
 pulse_shaper pulse_inst(
@@ -907,16 +892,14 @@ calculate_position cal_position_X(
    .IIR_OUT_K2(`IIR_OUT_K2),	
 	.CH0_ADC_OFFSET(`CH0_ADC_OFFSET), // HJ Nov 27, 2023
 	.CH1_ADC_OFFSET(`CH1_ADC_OFFSET), // HJ Nov 27, 2023
-	.enable_avg(ena_avg), // HJ Dec 13, 2023
-	
+	.LPF_sel(1'b0),
 	.A_comp(peak_A),
 	.B_comp(peak_B),
 	.A_max(max_A),
 	.B_max(max_B),
 	.A_min(min_A),
 	.B_min(min_B),
-	.fp_pos_mm_LPF(X_fp_pos),
-	.position(X_Position)  //16 bit signed DAC value
+	.fp_pos_mm_LPF(X_fp_pos)
 	
     );
 /*

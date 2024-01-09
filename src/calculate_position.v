@@ -35,7 +35,7 @@ module calculate_position(
 	input [SF_WIDTH-1:0] IIR_OUT_K2, //LPF K2, fp
 	input [DATA_WIDTH-1:0] CH0_ADC_OFFSET,//offset adjust, ADC counts (HJ Nov 27,2023)
 	input [DATA_WIDTH-1:0] CH1_ADC_OFFSET,//offset adjust, ADC counts (HJ Nov 27,2023)
-	input enable_avg,
+	input LPF_sel, // 0 for first order, 1 for 3rd order
 	
 	output [SF_WIDTH-1:0] A_comp,
 	output [SF_WIDTH-1:0] B_comp,
@@ -45,8 +45,7 @@ module calculate_position(
 	output [SF_WIDTH-1:0] A_min,
 	output [SF_WIDTH-1:0] B_min,
 	
-	output [SF_WIDTH-1:0] fp_pos_mm_LPF,	
-	output signed [DATA_WIDTH-1:0] position  //16 bit signed DAC value. 
+	output [SF_WIDTH-1:0] fp_pos_mm_LPF
 	
     );
 
@@ -74,6 +73,10 @@ wire sigma_zero;
 wire [SF_WIDTH-1:0] sigma_div = sigma_zero? fp1 : sigma;
 
 wire [SF_WIDTH-1:0] A_gained, B_gained;
+
+wire [SF_WIDTH-1:0] fp_pos_mm_LPF1,fp_pos_mm_LPF3;
+
+assign fp_pos_mm_LPF = fp_pos_mm_LPF1;
 
 always @ (posedge clk) 
 	if (gate) begin ch0_Amp <= A_amp; ch1_Amp <= B_amp; end		
@@ -120,8 +123,8 @@ altfp_mul mul_inst2 (.dataa(fp_X_OFFSET), .datab(fpdot001), .clock(clk), .result
 altfp_add add_inst4(.dataa(D), .datab(fpOFFSETmm), .clock(clk), .result(fp_pos_mm) );// fp position in mm
 
 //16 bit DAC value, +/-10V, 1mm/V, or 10mm/V
-altfp_mul mul_inst3 (.dataa(fp_pos_mm), .datab(kdac), .clock(clk), .result(fp_pos_dac) );  
-altfp_fp2int fp2int_inst3(.dataa(fp_pos_dac), .clock(clk), .result(position));
+//altfp_mul mul_inst3 (.dataa(fp_pos_mm), .datab(kdac), .clock(clk), .result(fp_pos_dac) );  
+//altfp_fp2int fp2int_inst3(.dataa(fp_pos_dac), .clock(clk), .result(position));
 
 // Tc = tao*T = [-1/ln(K2)] * T
 // tao = 1/(2Pi*Fc), Fc: 3dB BW of the LPF
@@ -138,9 +141,16 @@ LPF_IIR LPF_output_inst0(
     .in_valid(1'b1), //
 	 .data_in(fp_pos_mm),
 	 .K2(IIR_OUT_K2),
-    .data_out(fp_pos_mm_LPF) //
+    .data_out(fp_pos_mm_LPF1) //
     );
-
+	 
+	 
+//IIR_3 LPF3_inst0( 
+//    .FCLK(clk),
+//    .in_valid(1'b1), //
+//	 .data_in(fp_pos_mm),
+//    .data_out(fp_pos_mm_LPF3) //
+//    );
 
  
 endmodule

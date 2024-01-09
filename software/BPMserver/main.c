@@ -41,8 +41,6 @@ void Load_Conf();
 
 void* VR_BASE;
 
-
-
 void *TCP_connection(void *void_newsockfd)
 {
  char cmdString[256];

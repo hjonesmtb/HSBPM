@@ -14,6 +14,7 @@
 #define BLOCK_SIZE 1024 //block transfer size for FAST FIFO
 #define PACKET_SIZE 28 //block transfer size for PACKET
 
+
 static inline void writeReg(void* addr, uint32_t value)
 {
     *(uint32_t*) (addr) = value;
@@ -33,19 +34,18 @@ void Load_Conf()
 {
      writeReg(VR_BASE+EEPROM_RD,0);
 }
-
+	 
 
 int cmd_proc(char *cmdString_in , int *value_back, char **string_back, int **array_Ptr, int *array_Dim)
 {
-
-char cmd[50],*sdp,*chp;
+		
+	char cmd[50],*sdp,*chp;
 
   //uint32_t trash;
   //uint32_t fifo_wd;
 
-  uint32_t cmdlen, val_len;
-  uint32_t invalue,cntr;
-
+   uint32_t cmdlen, val_len;
+   uint32_t invalue,cntr;
     
 	strcpy(cmd, cmdString_in);
 	chp = strchr(cmd,'\r');
@@ -53,7 +53,7 @@ char cmd[50],*sdp,*chp;
 	cmdlen = strlen(cmd);
 
 	//printf("\n\r cmd_porc.c:Your command is %s, Len=%d\n\r",cmd, cmdlen);
-	
+
 	  
 	if ( cmdlen == 0 ){
     	printf("\n\r Error: Your command doesn't contain any characters \n\r" );  return 0;}
@@ -98,7 +98,9 @@ char cmd[50],*sdp,*chp;
 
 		if ( strcmp(cmd,"SFIFO:WD?")== 0 ) {*value_back = readReg(VR_BASE+SFIFO_WD);return 1;}
 		if ( strcmp(cmd,"SFIFO?")== 0 ) {
-    		for(cntr=0;cntr<PACKET_SIZE;cntr++)  dataArray[cntr]= readReg(VR_BASE+SFIFO);
+    		for(cntr=0;cntr<PACKET_SIZE;cntr++){
+				dataArray[cntr]= readReg(VR_BASE+SFIFO);	
+			}
 			*array_Ptr = &dataArray[0]; *array_Dim = PACKET_SIZE;
     		return 3;}
 		
