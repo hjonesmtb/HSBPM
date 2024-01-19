@@ -45,10 +45,12 @@ module calculate_position(
 	output [SF_WIDTH-1:0] A_min,
 	output [SF_WIDTH-1:0] B_min,
 	
-	output [SF_WIDTH-1:0] fp_pos_mm_LPF
+	output [SF_WIDTH-1:0] fp_pos_mm_cal // changed
 	
     );
 
+wire	[SF_WIDTH-1:0] fp_pos_mm_LPF;
+	 
 parameter SF_WIDTH = 32; 
 parameter DATA_WIDTH = 16;
 parameter SUM_WIDTH = 32; 
@@ -74,10 +76,12 @@ wire [SF_WIDTH-1:0] sigma_div = sigma_zero? fp1 : sigma;
 
 wire [SF_WIDTH-1:0] A_gained, B_gained;
 
-wire [SF_WIDTH-1:0] A_over_B; // = A/B
+//wire [SF_WIDTH-1:0] A_over_B; // = A/B
 reg [SF_WIDTH-1:0] A_scale, B_scale; // calibration values for each channel
-	
-altfp_div3232 div_inst1 (.dataa(ch0_Amp), . datab(ch1_Amp), .clock(clk), .result(A_over_B));   // ratio = A/B
+
+reg [SF_WIDTH-1:0] X_cal;
+ 
+//altfp_div3232 div_inst1 (.dataa(ch0_Amp), . datab(ch1_Amp), .clock(clk), .result(A_over_B));   // ratio = A/B
 
 always @ (posedge clk) 
 	begin
@@ -93,9 +97,12 @@ always @ (posedge clk)
 
 			if(cal_sel) begin
 				if(clk_1Hz) begin
+					X_cal <= fp_pos_mm_LPF;
+					A_scale <= FP_CH0_NF;
+					B_scale <= FP_CH1_NF;	
 					
-					A_scale <= fp1;
-					B_scale <= A_over_B;
+//					A_scale <= fp1;
+//					B_scale <= A_over_B;
 				end
 			end
 			else begin
@@ -170,6 +177,7 @@ LPF_IIR LPF_output_inst0(
     .data_out(fp_pos_mm_LPF) //
     );
 	 
+altfp_sub sub_inst2 (.dataa(fp_pos_mm_LPF), .datab(X_cal), .clock(clk), .result(fp_pos_mm_cal) ); // calibration
  
 endmodule
 

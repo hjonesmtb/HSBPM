@@ -949,7 +949,7 @@ calculate_position cal_position_X(
 	.B_max(max_B),
 	.A_min(min_A),
 	.B_min(min_B),
-	.fp_pos_mm_LPF(X_fp_pos)
+	.fp_pos_mm_cal(X_fp_pos)
 	
     );
 	 
@@ -977,7 +977,7 @@ calculate_position cal_position_Y(
 	.B_max(max_D),
 	.A_min(min_C),
 	.B_min(min_D),
-	.fp_pos_mm_LPF(Y_fp_pos)
+	.fp_pos_mm_cal(Y_fp_pos)
 	
     );
 	 
