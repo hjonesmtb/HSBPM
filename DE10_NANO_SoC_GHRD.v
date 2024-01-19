@@ -575,7 +575,7 @@ wire auto_trig_sel = `CON_REG_L[7];
 wire ena_avg = `CON_REG_H[1]; //enable input FIR
 wire is10mmpV = `CON_REG_H[2]; //DAC ratio: 10mm /V, or 1mm/V
 wire [1:0] AVG_select = `CON_REG_H[4:3]; //Averaging times: 4,16,32, 64 four selections
-wire ena_gain = `CON_REG_H[5]; //Choose FIR gain. 1 for 4x, 0 for 1x.
+wire cal_sel = `CON_REG_H[5]; // choose calibration. 1 for autocal, 0 for manual
 
 wire pulse1KHz,auto_trig; 
 wire DAC_update = trig; //changed from auto_trig. HJ Nov 29, 2023
@@ -767,14 +767,33 @@ self_trigger self_trigger_inst(
 
 
 //================ processing ==============
+reg clk_1Hz;
+reg [24:0] count_1Hz; // count to 20 million
+
+always @ (posedge SCLK) begin
+	
+	count_1Hz <= count_1Hz + 1;
+	
+	if(count_1Hz == 25'd19900000) begin
+		clk_1Hz <= 1'b1;
+	end
+	else if(count_1Hz == 25'd20000000) begin
+		count_1Hz <= 25'b0;
+		clk_1Hz <= 1'b0;
+	end
+	
+end
+
 wire [DATA_WIDTH-1:0] Ch0_Din_FIR, Ch1_Din_FIR;
 wire [DATA_WIDTH-1:0] Ch0_Din/*synthesis keep*/;
 wire [DATA_WIDTH-1:0] Ch1_Din/*synthesis keep*/; 
+wire [DATA_WIDTH-1:0] Ch2_Din/*synthesis keep*/; 
+wire [DATA_WIDTH-1:0] Ch3_Din/*synthesis keep*/; 
 
 FIR BPF0(
     .clk(SCLK),
     .reset(SYS_RST),
-	 .ena_gain(ena_gain), // this sig should come from DDC output
+	 .ena_gain(1'b1), // this sig should come from DDC output
     .data_in(Ch0_ADC_DATA),
     .data_out(Ch0_Din_FIR)
     );
@@ -782,17 +801,31 @@ FIR BPF0(
 FIR BPF1(
     .clk(SCLK),
     .reset(SYS_RST),
-	 .ena_gain(ena_gain), // this sig should come from DDC output
+	 .ena_gain(1'b1), // this sig should come from DDC output
     .data_in(Ch1_ADC_DATA),
     .data_out(Ch1_Din_FIR)
     );	 
 
+FIR BPF2(
+    .clk(SCLK),
+    .reset(SYS_RST),
+	 .ena_gain(1'b1), // this sig should come from DDC output
+    .data_in(Ch2_ADC_DATA),
+    .data_out(Ch2_Din_FIR)
+    );
 
+FIR BPF3(
+    .clk(SCLK),
+    .reset(SYS_RST),
+	 .ena_gain(1'b1), // this sig should come from DDC output
+    .data_in(Ch3_ADC_DATA),
+    .data_out(Ch3_Din_FIR)
+    );	 
+	 
 assign Ch0_Din = ena_avg? Ch0_Din_FIR: {Ch0_ADC_DATA[13],Ch0_ADC_DATA[13],Ch0_ADC_DATA};
 assign Ch1_Din = ena_avg? Ch1_Din_FIR: {Ch1_ADC_DATA[13],Ch1_ADC_DATA[13],Ch1_ADC_DATA};
-
-wire [DATA_WIDTH-1:0] Ch2_Din = {Ch2_ADC_DATA[13],Ch2_ADC_DATA[13],Ch2_ADC_DATA};
-wire [DATA_WIDTH-1:0] Ch3_Din = {Ch3_ADC_DATA[13],Ch3_ADC_DATA[13],Ch3_ADC_DATA}; 
+assign Ch2_Din = ena_avg? Ch2_Din_FIR: {Ch2_ADC_DATA[13],Ch2_ADC_DATA[13],Ch2_ADC_DATA};
+assign Ch3_Din = ena_avg? Ch3_Din_FIR: {Ch3_ADC_DATA[13],Ch3_ADC_DATA[13],Ch3_ADC_DATA};
 
 wire [FULL_WIDTH-1:0] channel_din = {Ch3_Din,Ch2_Din,Ch1_Din,Ch0_Din};
 wire [FULL_WIDTH-1:0] channel_dout;
@@ -837,21 +870,32 @@ channel_block Ch_XY_inst(
 //--------- Align demodulated channel signal-----------------------------------------------------	 
 
 // it seems like both X and Y channels need to be aligned separately. So another alignment module will be needed.
-wire [FULL_WIDTH-1:0] signal_delayed;
-alignment align_inst(
+wire [FULL_WIDTH-1:0] signal_delayed_X;
+alignment align_X(
 	.signal({fp_ch1_Amp,fp_ch0_Amp}), //demodulated signal
 	.gate(gate), 
 	.transition(), //not in use 
 	.clk(DCLK), //clock is ADC_clk/8 = 2.5 MHz 
 	.reset(SYS_RST),
-	.signal_delayed(signal_delayed),
+	.signal_delayed(signal_delayed_X),
 	.new_gate(new_gate)
+);
+
+wire [FULL_WIDTH-1:0] signal_delayed_Y;
+alignment align_Y(
+	.signal({fp_ch3_Amp,fp_ch2_Amp}), //demodulated signal
+	.gate(gate), 
+	.transition(), //not in use 
+	.clk(DCLK), //clock is ADC_clk/8 = 2.5 MHz 
+	.reset(SYS_RST),
+	.signal_delayed(signal_delayed_Y),
+	.new_gate()
 );
 
 
 //--------- Calculate peak, position and ..-----------------------------------------------------	 
 wire [SF_WIDTH-1:0] peak_A,peak_B,peak_C,peak_D,X_fp_pos,Y_fp_pos/*synthesis keep*/;
-wire [SF_WIDTH-1:0] max_A,max_B,min_A,min_B/*synthesis keep*/;
+wire [SF_WIDTH-1:0] max_A,max_B,min_A,min_B,max_C,max_D,min_C,min_D/*synthesis keep*/;
 wire [DATA_WIDTH-1:0] Xdac, Ydac/* synthesis keep */; //16 bit position signed, two's complement. Modified (removed sign) Nov 23,2023
 wire signed [DATA_WIDTH-1:0] X_Position, Y_Position; //16 bit position signed, two's complement.
 
@@ -874,12 +918,16 @@ parameter fpd99 = 32'H3f7d70a4; //0.99 in fp
 parameter fpd999 = 32'H3f7fbe77; //0.999 in fp
 
 wire [DATA_WIDTH-1:0] delayed_ch0,delayed_ch1/*synthesis keep*/;
-altfp_fp2int conv_inst0(.dataa(signal_delayed[31:0]), .clock(DCLK),.result(delayed_ch0));
-altfp_fp2int conv_inst1(.dataa(signal_delayed[63:32]),.clock(DCLK),.result(delayed_ch1));
+altfp_fp2int conv_inst0(.dataa(signal_delayed_X[31:0]), .clock(DCLK),.result(delayed_ch0));
+altfp_fp2int conv_inst1(.dataa(signal_delayed_X[63:32]),.clock(DCLK),.result(delayed_ch1));
+
+wire [DATA_WIDTH-1:0] delayed_ch2,delayed_ch3/*synthesis keep*/;
+altfp_fp2int conv_inst2(.dataa(signal_delayed_Y[31:0]), .clock(DCLK),.result(delayed_ch2));
+altfp_fp2int conv_inst3(.dataa(signal_delayed_Y[63:32]),.clock(DCLK),.result(delayed_ch3));
 								 
 calculate_position cal_position_X(
-	.A_amp(signal_delayed[31:0]), //
-	.B_amp(signal_delayed[63:32]),//
+	.A_amp(signal_delayed_X[31:0]), //
+	.B_amp(signal_delayed_X[63:32]),//
 	.data_valid(), 
 	.OFFSET(`X_OFFSET),//offset adjust, um
 	.FP_CH0_NF(`FP_CH0_NF), //gain compensation, around 1.0
@@ -893,7 +941,8 @@ calculate_position cal_position_X(
    .IIR_OUT_K2(`IIR_OUT_K2),	
 	.CH0_ADC_OFFSET(`CH0_ADC_OFFSET), // HJ Nov 27, 2023
 	.CH1_ADC_OFFSET(`CH1_ADC_OFFSET), // HJ Nov 27, 2023
-	.LPF_sel(1'b0),
+	.cal_sel(cal_sel),
+	.clk_1Hz(clk_1Hz),
 	.A_comp(peak_A),
 	.B_comp(peak_B),
 	.A_max(max_A),
@@ -903,7 +952,36 @@ calculate_position cal_position_X(
 	.fp_pos_mm_LPF(X_fp_pos)
 	
     );
-/*
+	 
+calculate_position cal_position_Y(
+	.A_amp(signal_delayed_Y[31:0]), //
+	.B_amp(signal_delayed_Y[63:32]),//
+	.data_valid(), 
+	.OFFSET(`Y_OFFSET),//offset adjust, um
+	.FP_CH0_NF(`FP_CH2_NF), //gain compensation, around 1.0
+	.FP_CH1_NF(`FP_CH3_NF), //
+	.FP_KXY(`FP_KXY), // 32 bit fp, BPM sensitivity, i.g. 0.42 dB/mm for ISAC BPM
+	.is10mmpV(is10mmpV), //10mm/V or 1mm/V DAC
+	.AVG_select(AVG_select), //Not in use, March 8,2023
+	.clk(DCLK),  
+	.rst(maxmin_rst),
+	.gate(new_gate), //only calculate position inside this signal
+   .IIR_OUT_K2(`IIR_OUT_K2),	
+	.CH0_ADC_OFFSET(16'b0), // HJ Nov 27, 2023
+	.CH1_ADC_OFFSET(16'b0), // HJ Nov 27, 2023
+	.cal_sel(cal_sel),
+	.clk_1Hz(clk_1Hz),
+	.A_comp(peak_C),
+	.B_comp(peak_D),
+	.A_max(max_C),
+	.B_max(max_D),
+	.A_min(min_C),
+	.B_min(min_D),
+	.fp_pos_mm_LPF(Y_fp_pos)
+	
+    );
+	 
+/* OLD declaration from Shengli
 calculate_position cal_position_Y(
 	.A_amp(ch2), //
 	.B_amp(ch3),//16 bit, amplitude signal 
@@ -1009,8 +1087,8 @@ calculate_position cal_position_Y(
 					1: begin sfifo_data_in <= {`CON_REG_H,`CON_REG_L,status_reg}; p_state <= 2; end
 					2: begin sfifo_data_in <= peak_A; p_state <= 3; end
 					3: begin sfifo_data_in <= peak_B; p_state <= 4; end			
-					4: begin sfifo_data_in <= max_A; p_state <= 5; end
-					5: begin sfifo_data_in <= min_A; p_state <= 6; end
+					4: begin sfifo_data_in <= peak_C; p_state <= 5; end
+					5: begin sfifo_data_in <= peak_D; p_state <= 6; end
 					6: begin sfifo_data_in <= X_fp_pos; p_state <= 7; end
 					7: begin sfifo_data_in <= Y_fp_pos; p_state <= 8; end
 					8: begin sfifo_data_in <= {Y_Position,X_Position}; p_state <= 9; end
