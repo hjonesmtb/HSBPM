@@ -245,7 +245,7 @@ wire VGA_GAIN_A1,VGA_GAIN_A0;
 assign GPIO_1_4 = VGA_GAIN_A1;
 assign GPIO_1_7 = VGA_GAIN_A0;
 
-wire ST_on;   //turn on self-test built-in 46MHz osccilator, could be turn-on and off to get pulsed 46Mhz siganl
+reg ST_on;   //turn on self-test built-in 46MHz osccilator, could be turn-on and off to get pulsed 46Mhz siganl
 assign GPIO_1_5 = ST_on;
 
 //ADC interface
@@ -582,7 +582,8 @@ wire DAC_update = trig; //changed from auto_trig. HJ Nov 29, 2023
 
 Self_Test Self_Test_inst(.clk(SYS_CLK), .trig(auto_trig), .Dcycle(`CAL_DC),.pulse(pulse1KHz));
 
-assign ST_on = Ena_ST & pulse1KHz;
+
+//assign ST_on = Ena_ST & pulse1KHz;
 //assign ST_on = 1'b0;  //it seems this signal causes the SoC boot up failure!
 
 //---------------------------------------------------------------
@@ -767,19 +768,26 @@ self_trigger self_trigger_inst(
 
 
 //================ processing ==============
-reg clk_1Hz;
-reg [24:0] count_1Hz; // count to 20 million
+reg clk_1Hz; // 1Hz pulse with 0.8% duty cycle (8ms width)
+reg [21:0] count_1Hz; // count to 2.5 million
 
-always @ (posedge SCLK) begin
+
+// generate 1 Hz pulse, and an extended version (ST_on) to account for calculate_position latency
+always @ (posedge DCLK) begin
 	
 	count_1Hz <= count_1Hz + 1;
 	
-	if(count_1Hz == 25'd19900000) begin
+	if(count_1Hz == 25'd2480000) begin
 		clk_1Hz <= 1'b1;
+		ST_on <= 1'b1;
 	end
-	else if(count_1Hz == 25'd20000000) begin
-		count_1Hz <= 25'b0;
+	else if(count_1Hz == 25'd2500000) begin
 		clk_1Hz <= 1'b0;
+	end
+	
+	else if(count_1Hz == 25'd2500080)begin
+		count_1Hz <= 25'b0;
+		ST_on <= 1'b0;
 	end
 	
 end
@@ -1068,7 +1076,7 @@ calculate_position cal_position_Y(
 	always @(posedge SCLK)
 		new_gate_last <= new_gate;
 	
-	assign sfifo_trig = ((!new_gate) && new_gate_last); // load sfifo when new_gate is falling
+	assign sfifo_trig = ((!new_gate) && new_gate_last) && (!ST_on); // load sfifo when new_gate is falling, but not when calibrating
 
 //data packet size is 8 words (32bit)
 

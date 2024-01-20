@@ -14,6 +14,7 @@
 //
 //////////////////////////////////////////////////////////////////////////////////
 
+// ~78 clk latency = 31 us
 module calculate_position(
    
 	input [SF_WIDTH-1:0] A_amp, //fp 32 bit, amplitude signal 
@@ -134,24 +135,31 @@ Maxmin maxmin_inst(
 
 altfp_16int2fp int2fpconv_inst3 (.dataa(OFFSET), .clock(clk), .result(fp_X_OFFSET)); // to floating point
 
+
 altfp_16int2fp int2fpconv_inst4 (.dataa(CH0_ADC_OFFSET), .clock(clk), .result(fpCH0_OFFSET)); // to floating point
 altfp_16int2fp int2fpconv_inst5 (.dataa(CH1_ADC_OFFSET), .clock(clk), .result(fpCH1_OFFSET)); // to floating point
 
-//compensate gain
+//compensate gain. 7 clks
 altfp_mul mul_inst2 (.dataa(ch0_Amp), .datab(A_scale), .clock(clk), .result(A_gained) ); // ajust gain. This could be done in fixed point.
 altfp_mul mul_inst3 (.dataa(ch1_Amp), .datab(B_scale), .clock(clk), .result(B_gained) ); //  
 
-altfp_add add_inst1 (.dataa(A_gained), .datab(fpCH0_OFFSET), .clock(clk), .result(A_comp));// offset
-altfp_add add_inst2 (.dataa(B_gained), .datab(fpCH1_OFFSET), .clock(clk), .result(B_comp));// offset
+// offset. 7clks
+altfp_add add_inst1 (.dataa(A_gained), .datab(fpCH0_OFFSET), .clock(clk), .result(A_comp));// offset. 7 clks
+altfp_add add_inst2 (.dataa(B_gained), .datab(fpCH1_OFFSET), .clock(clk), .result(B_comp));// offset 7 clks
 
-altfp_sub sub_inst1 (.dataa(A_comp), .datab(B_comp), .clock(clk), .result(delta) ); // Delta
-altfp_add add_inst3 (.dataa(A_comp), .datab(B_comp), .clock(clk), .result(sigma), .zero(sigma_zero) );// Sigma
-altfp_div3232 div_inst2 (.dataa(delta), . datab(sigma_div), .clock(clk), .result(C));   //C = (A-B)/(A+B)
+// delata sigma, 7 clks
+altfp_sub sub_inst1 (.dataa(A_comp), .datab(B_comp), .clock(clk), .result(delta) ); // Delta. 7 clks
+altfp_add add_inst3 (.dataa(A_comp), .datab(B_comp), .clock(clk), .result(sigma), .zero(sigma_zero) );// Sigma. 7 clks
+
+// division, 14 clks
+altfp_div3232 div_inst2 (.dataa(delta), . datab(sigma_div), .clock(clk), .result(C));   //C = (A-B)/(A+B). 14 clks
 
 altfp_mul mul_inst4 (.dataa(FP_KXY), .datab(fp100), .clock(clk), .result(Kxy) ); //  
+
+// scale. 7 clks
 altfp_mul mul_inst5 (.dataa(Kxy), .datab(C), .clock(clk), .result(D) ); //D is position value in mm   
 
-//adjust offset
+//adjust offset. 7 clks
 altfp_mul mul_inst6 (.dataa(fp_X_OFFSET), .datab(fpdot001), .clock(clk), .result(fpOFFSETmm) );  //um to mm
 altfp_add add_inst4(.dataa(D), .datab(fpOFFSETmm), .clock(clk), .result(fp_pos_mm) );// fp position in mm
 
@@ -169,6 +177,7 @@ altfp_add add_inst4(.dataa(D), .datab(fpOFFSETmm), .clock(clk), .result(fp_pos_m
 // K2 = 0.999, Tc = [-1/ln(0.999)] * 400ns = 400 us; 0.4 KHz
 // K2 = 0.9995, Tc = [-1/ln(0.999)] * 400ns = 800 us; 0.2 KHz
 
+// LPF. 22 clks
 LPF_IIR LPF_output_inst0( 
     .FCLK(clk),
     .in_valid(1'b1), //
@@ -177,6 +186,7 @@ LPF_IIR LPF_output_inst0(
     .data_out(fp_pos_mm_LPF) //
     );
 	 
+// calibrate. 7 clks
 altfp_sub sub_inst2 (.dataa(fp_pos_mm_LPF), .datab(X_cal), .clock(clk), .result(fp_pos_mm_cal) ); // calibration
  
 endmodule
