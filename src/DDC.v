@@ -185,10 +185,6 @@ always @ (posedge clk)
 	end
 
 //divided by 5000, to make 16 bit integer not overflow, for display in labview
-//altfp_div3232 div_inst0 (.dataa(fp_ch0), .datab(FP_5000), .clock(clk), .result(fp_ch0_Amp));   
-//altfp_div3232 div_inst1 (.dataa(fp_ch1), .datab(FP_5000), .clock(clk), .result(fp_ch1_Amp));  
-//altfp_div3232 div_inst2 (.dataa(fp_ch2), .datab(FP_5000), .clock(clk), .result(fp_ch2_Amp));   
-//altfp_div3232 div_inst3 (.dataa(fp_ch3), .datab(FP_5000), .clock(clk), .result(fp_ch3_Amp));    
 
 altfp_mul mul_inst0 (.dataa(fp_ch0), .datab(FP_0002), .clock(clk), .result(fp_ch0_Amp) );
 altfp_mul mul_inst1 (.dataa(fp_ch1), .datab(FP_0002), .clock(clk), .result(fp_ch1_Amp) );

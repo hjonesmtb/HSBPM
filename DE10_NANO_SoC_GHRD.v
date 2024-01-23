@@ -768,25 +768,25 @@ self_trigger self_trigger_inst(
 
 
 //================ processing ==============
-reg clk_1Hz; // 1Hz pulse with 0.8% duty cycle (8ms width)
-reg [21:0] count_1Hz; // count to 2.5 million
+reg clk_10Hz; // 10Hz pulse with 0.8% duty cycle (0.8ms width)
+reg [21:0] count_10Hz; // count to 2.5 million
 
 
-// generate 1 Hz pulse, and an extended version (ST_on) to account for calculate_position latency
+// generate 10Hz period pulse, and an extended version (ST_on) to account for calculate_position latency
 always @ (posedge DCLK) begin
 	
-	count_1Hz <= count_1Hz + 1;
+	count_10Hz <= count_10Hz + 1;
 	
-	if(count_1Hz == 25'd2480000) begin
-		clk_1Hz <= 1'b1;
+	if(count_10Hz == 25'd248000) begin
+		clk_10Hz <= 1'b1;
 		ST_on <= 1'b1;
 	end
-	else if(count_1Hz == 25'd2500000) begin
-		clk_1Hz <= 1'b0;
+	else if(count_10Hz == 25'd250000) begin
+		clk_10Hz <= 1'b0;
 	end
 	
-	else if(count_1Hz == 25'd2500080)begin
-		count_1Hz <= 25'b0;
+	else if(count_10Hz == 25'd250080)begin
+		count_10Hz <= 25'b0;
 		ST_on <= 1'b0;
 	end
 	
@@ -903,6 +903,7 @@ alignment align_Y(
 
 //--------- Calculate peak, position and ..-----------------------------------------------------	 
 wire [SF_WIDTH-1:0] peak_A,peak_B,peak_C,peak_D,X_fp_pos,Y_fp_pos/*synthesis keep*/;
+wire [SF_WIDTH-1:0] X_fp_pos_uncal;
 wire [SF_WIDTH-1:0] max_A,max_B,min_A,min_B,max_C,max_D,min_C,min_D/*synthesis keep*/;
 wire [DATA_WIDTH-1:0] Xdac, Ydac/* synthesis keep */; //16 bit position signed, two's complement. Modified (removed sign) Nov 23,2023
 wire signed [DATA_WIDTH-1:0] X_Position, Y_Position; //16 bit position signed, two's complement.
@@ -950,13 +951,14 @@ calculate_position cal_position_X(
 	.CH0_ADC_OFFSET(`CH0_ADC_OFFSET), // HJ Nov 27, 2023
 	.CH1_ADC_OFFSET(`CH1_ADC_OFFSET), // HJ Nov 27, 2023
 	.cal_sel(cal_sel),
-	.clk_1Hz(clk_1Hz),
+	.clk_10Hz(clk_10Hz),
 	.A_comp(peak_A),
 	.B_comp(peak_B),
 	.A_max(max_A),
 	.B_max(max_B),
 	.A_min(min_A),
 	.B_min(min_B),
+	.fp_pos_mm_LPF(X_fp_pos_uncal),
 	.fp_pos_mm_cal(X_fp_pos)
 	
     );
@@ -978,13 +980,14 @@ calculate_position cal_position_Y(
 	.CH0_ADC_OFFSET(16'b0), // HJ Nov 27, 2023
 	.CH1_ADC_OFFSET(16'b0), // HJ Nov 27, 2023
 	.cal_sel(cal_sel),
-	.clk_1Hz(clk_1Hz),
+	.clk_10Hz(clk_10Hz),
 	.A_comp(peak_C),
 	.B_comp(peak_D),
 	.A_max(max_C),
 	.B_max(max_D),
 	.A_min(min_C),
 	.B_min(min_D),
+	.fp_pos_mm_LPF(),
 	.fp_pos_mm_cal(Y_fp_pos)
 	
     );
@@ -1099,7 +1102,7 @@ calculate_position cal_position_Y(
 					5: begin sfifo_data_in <= peak_D; p_state <= 6; end
 					6: begin sfifo_data_in <= X_fp_pos; p_state <= 7; end
 					7: begin sfifo_data_in <= Y_fp_pos; p_state <= 8; end
-					8: begin sfifo_data_in <= {Y_Position,X_Position}; p_state <= 9; end
+					8: begin sfifo_data_in <= X_fp_pos_uncal; p_state <= 9; end
 					9: begin sfifo_data_in <= {humi,temp}; p_state <= 10; end
 					10: begin sfifo_data_in <= max_A; p_state <= 11; end
 					11: begin sfifo_data_in <= max_B; p_state <= 12; end

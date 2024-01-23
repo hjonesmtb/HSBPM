@@ -46,11 +46,10 @@ module calculate_position(
 	output [SF_WIDTH-1:0] A_min,
 	output [SF_WIDTH-1:0] B_min,
 	
+	output	[SF_WIDTH-1:0] fp_pos_mm_LPF,
 	output [SF_WIDTH-1:0] fp_pos_mm_cal // changed
 	
     );
-
-wire	[SF_WIDTH-1:0] fp_pos_mm_LPF;
 	 
 parameter SF_WIDTH = 32; 
 parameter DATA_WIDTH = 16;
@@ -101,12 +100,12 @@ always @ (posedge clk)
 					X_cal <= fp_pos_mm_LPF;
 					A_scale <= FP_CH0_NF;
 					B_scale <= FP_CH1_NF;	
-					
 //					A_scale <= fp1;
 //					B_scale <= A_over_B;
 				end
 			end
 			else begin
+				X_cal <= 0;
 				A_scale <= FP_CH0_NF;
 				B_scale <= FP_CH1_NF;
 			end
