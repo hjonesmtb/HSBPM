@@ -173,7 +173,7 @@ module DE10_NANO_SoC_GHRD(
 	 output GPIO_0_31, //SCL
 	 inout  GPIO_0_33, //SDA
 	 
-	 input GPIO_0_28, //trigger 
+	 input GPIO_0_28, //LO 
 	 inout GPIO_0_30, //temp	 
 	 
     //////////// KEY //////////
@@ -253,9 +253,9 @@ wire ext_trigger = GPIO_1_0;
 
 wire LED_RUNNING;
 wire LED_Fault = Cold_Reset_Req;
-wire Cold_Reset_Req = ~GPIO_0_32;  //cold reset push button from front panel 
-assign GPIO_0_34 = LED_RUNNING;  //LED_COMM, indicating communication activity, not implemented yet.
-assign GPIO_0_35 = LED_Fault;  //should response to reset_push button action? 
+wire Cold_Reset_Req = ~GPIO_0_32;  // cold reset push button from front panel 
+assign GPIO_0_34 = LED_RUNNING;  // LED_COMM, indicating communication activity, not implemented yet.
+assign GPIO_0_35 = LED_Fault;  // should response to reset_push button action? 
 
 //ADC interface
 wire [13:0] ADC_DA,ADC_DB,ADC_DC,ADC_DD;
