@@ -20,10 +20,10 @@ module DDC(
 	output d_clk, //clk for decimated data
 	output clken, //for decimated data
 	output [DATA_WIDTH-1:0] error, 
-	output [SF_WIDTH-1:0] fp_ch0_Amp,   //32 bit (floating point), decimated amplitude signals
-	output [SF_WIDTH-1:0] fp_ch1_Amp, 
+	output [SF_WIDTH-1:0] fp_ch1_Amp,   //32 bit (floating point), decimated amplitude signals
 	output [SF_WIDTH-1:0] fp_ch2_Amp, 
-	output [SF_WIDTH-1:0] fp_ch3_Amp 
+	output [SF_WIDTH-1:0] fp_ch3_Amp, 
+	output [SF_WIDTH-1:0] fp_ch4_Amp 
 	
     );
 	 
@@ -186,10 +186,10 @@ always @ (posedge clk)
 
 //divided by 5000, to make 16 bit integer not overflow, for display in labview
 
-altfp_mul mul_inst0 (.dataa(fp_ch0), .datab(FP_0002), .clock(clk), .result(fp_ch0_Amp) );
-altfp_mul mul_inst1 (.dataa(fp_ch1), .datab(FP_0002), .clock(clk), .result(fp_ch1_Amp) );
-altfp_mul mul_inst2 (.dataa(fp_ch2), .datab(FP_0002), .clock(clk), .result(fp_ch2_Amp) );
-altfp_mul mul_inst3 (.dataa(fp_ch3), .datab(FP_0002), .clock(clk), .result(fp_ch3_Amp) );
+altfp_mul mul_inst0 (.dataa(fp_ch0), .datab(FP_0002), .clock(clk), .result(fp_ch1_Amp) );
+altfp_mul mul_inst1 (.dataa(fp_ch1), .datab(FP_0002), .clock(clk), .result(fp_ch2_Amp) );
+altfp_mul mul_inst2 (.dataa(fp_ch2), .datab(FP_0002), .clock(clk), .result(fp_ch3_Amp) );
+altfp_mul mul_inst3 (.dataa(fp_ch3), .datab(FP_0002), .clock(clk), .result(fp_ch4_Amp) );
 
 endmodule
 

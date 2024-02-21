@@ -14,7 +14,7 @@
 //-----------------------------
 
 //parameter FPGA_VERSION_NO = 32'd0047; //verification
-parameter FPGA_VERSION_NO = 32'd20240123; // Modified on jan 23, 2024
+parameter FPGA_VERSION_NO = 32'd20240221; // Modified on Feb 21, 2024
 
 module DE10_NANO_SoC_GHRD(
 
@@ -99,6 +99,7 @@ module DE10_NANO_SoC_GHRD(
 	 output GPIO_1_5, //ST_ON
 	 
 	//ADC 
+	// Channel 2 
 	output GPIO_1_34, //ADC_CLKAB
 	input  GPIO_1_21, //ADC_DA0
 	input  GPIO_1_18, //ADC_DA1
@@ -115,6 +116,7 @@ module DE10_NANO_SoC_GHRD(
 	input  GPIO_1_9, //ADC_DA12
 	input  GPIO_1_6, //ADC_DA13
 	
+	// Channel 1 
 	input  GPIO_1_35, //ADC_DB0
 	input  GPIO_1_32, //ADC_DB1
 	input  GPIO_1_33, //ADC_DB2
@@ -130,6 +132,7 @@ module DE10_NANO_SoC_GHRD(
 	input  GPIO_1_23, //ADC_DB12
 	input  GPIO_1_20, //ADC_DB13
 	
+	// Channel 4 
 	output GPIO_0_1, //ADC_CLKCD
 	input  GPIO_0_14, //ADC_DC0
 	input  GPIO_0_17, //ADC_DC1
@@ -146,6 +149,7 @@ module DE10_NANO_SoC_GHRD(
 	input  GPIO_0_26, //ADC_DC12
 	input  GPIO_0_29, //ADC_DC13
 	
+	// Channel 3 
 	input  GPIO_0_0, //ADC_DD0
 	input  GPIO_0_3, //ADC_DD1
 	input  GPIO_0_2, //ADC_DD2
@@ -185,10 +189,10 @@ module DE10_NANO_SoC_GHRD(
 
 `include "src/param.v"
 
-`define 	FP_CH0_NF {configuration[3],configuration[2],configuration[1],configuration[0]}
-`define 	FP_CH1_NF {configuration[7],configuration[6],configuration[5],configuration[4]}
-`define 	FP_CH2_NF {configuration[11],configuration[10],configuration[9],configuration[8]}
-`define 	FP_CH3_NF {configuration[15],configuration[14],configuration[13],configuration[12]}
+`define 	FP_CH1_NF {configuration[3],configuration[2],configuration[1],configuration[0]}
+`define 	FP_CH2_NF {configuration[7],configuration[6],configuration[5],configuration[4]}
+`define 	FP_CH3_NF {configuration[11],configuration[10],configuration[9],configuration[8]}
+`define 	FP_CH4_NF {configuration[15],configuration[14],configuration[13],configuration[12]}
 
 `define 	TRANSITION {configuration[17],configuration[16]}
 
@@ -201,17 +205,17 @@ module DE10_NANO_SoC_GHRD(
 `define 	X_OFFSET {configuration[27],configuration[26]}
 `define 	Y_OFFSET {configuration[29],configuration[28]}
 
-`define 	MODULE_ID0  {configuration[33],configuration[32],configuration[31],configuration[30]}
-`define 	MODULE_ID1  {configuration[37],configuration[36],configuration[35],configuration[34]}
-`define 	MODULE_ID2  {configuration[41],configuration[40],configuration[39],configuration[38]}
-`define 	MODULE_ID3  {configuration[45],configuration[44],configuration[43],configuration[42]}
+`define 	MODULE_ID1  {configuration[33],configuration[32],configuration[31],configuration[30]}
+`define 	MODULE_ID2  {configuration[37],configuration[36],configuration[35],configuration[34]}
+`define 	MODULE_ID3  {configuration[41],configuration[40],configuration[39],configuration[38]}
+`define 	MODULE_ID4  {configuration[45],configuration[44],configuration[43],configuration[42]}
 
 `define 	IIR_OUT_K2 {configuration[49],configuration[48],configuration[47],configuration[46]}
 `define 	CAL_DC   configuration[50]
 `define 	CAL_AMP  configuration[51]
 
-`define 	CH0_ADC_OFFSET  {configuration[53],configuration[52]}
-`define 	CH1_ADC_OFFSET  {configuration[55],configuration[54]}
+`define 	CH1_ADC_OFFSET  {configuration[53],configuration[52]}
+`define 	CH2_ADC_OFFSET  {configuration[55],configuration[54]}
 
 //=======================================================
 //  REG/WIRE declarations
@@ -375,12 +379,13 @@ clk_control clkbuf_inst  //buf to GCLK network
 	 );
 	
 
-reg [ADC_DATA_WIDTH-1:0] Ch0_ADC_DATA,	Ch1_ADC_DATA,Ch2_ADC_DATA,	Ch3_ADC_DATA/*synthesis keep*/;
+reg [ADC_DATA_WIDTH-1:0] Ch1_ADC_DATA,	Ch2_ADC_DATA,Ch3_ADC_DATA,	Ch4_ADC_DATA/*synthesis keep*/;
 // Sample 14 bit parallel ADC (AD9248-20). Data output format = two's compl.
+// ADC inputs are cross-swapped on ADC (Ch1 --> ADC input B, Ch2 --> ADC input A), so we must undo this.
 always @ (posedge ADC_CLK) 
 	begin 
-		Ch0_ADC_DATA <= ADC_DA; Ch1_ADC_DATA <= ADC_DB; 
-		Ch2_ADC_DATA <= ADC_DC; Ch3_ADC_DATA <= ADC_DD;
+		Ch1_ADC_DATA <= ADC_DB; Ch2_ADC_DATA <= ADC_DA; 
+		Ch3_ADC_DATA <= ADC_DD; Ch4_ADC_DATA <= ADC_DC;
 	end
 
 //							================ I2C EEPROM Interface ===============
@@ -435,10 +440,10 @@ parameter integer 	FIFO_ADDR = 11;
 parameter integer 	EEPROM_RD_ADDR = 15;
 parameter integer 	EEPROM_WR_ADDR = 16;
 
-parameter integer 	FP_CH0_NF_ADDR = 17;
-parameter integer 	FP_CH1_NF_ADDR = 18;
-parameter integer 	FP_CH2_NF_ADDR = 19;
-parameter integer 	FP_CH3_NF_ADDR = 20;
+parameter integer 	FP_CH1_NF_ADDR = 17;
+parameter integer 	FP_CH2_NF_ADDR = 18;
+parameter integer 	FP_CH3_NF_ADDR = 19;
+parameter integer 	FP_CH4_NF_ADDR = 20;
 
 parameter integer 	FP_KXY_ADDR = 21;
 parameter integer 	X_OFFSET_ADDR = 22;
@@ -452,14 +457,14 @@ parameter integer 	CAL_WAVE_ADDR = 33;
 parameter integer 	IIR_OUT_K1_ADDR = 47;
 parameter integer 	IIR_OUT_K2_ADDR = 48;
 
-parameter integer 	CH0_ADC_OFFSET_ADDR = 49; // HJ changed name from CH1_DAC_PEAK_OFFSET_ADDR
-parameter integer 	CH1_ADC_OFFSET_ADDR = 50; // CH1_DAC_AVG_OFFSET_ADDR
+parameter integer 	CH1_ADC_OFFSET_ADDR = 49; // HJ changed name from CH1_DAC_PEAK_OFFSET_ADDR
+parameter integer 	CH2_ADC_OFFSET_ADDR = 50; // CH1_DAC_AVG_OFFSET_ADDR
 
 parameter integer 	CH2_DAC_PEAK_OFFSET_ADDR = 51;
 parameter integer 	CH2_DAC_AVG_OFFSET_ADDR = 52;
 	
-parameter integer MODULE_ID0_ADDR = 71;
-parameter integer MODULE_ID1_ADDR = 72;	
+parameter integer MODULE_ID1_ADDR = 71;
+parameter integer MODULE_ID2_ADDR = 72;	
 
 //===========================  Avalon Bus interface 	============================ 
 soc_system u0(
@@ -677,17 +682,11 @@ always@(posedge SYS_CLK)
 	if ((avalon_addr == CAL_WAVE_ADDR) & (avalon_read_o == 1) ) 
 			dout <= {16'b0,`CAL_AMP,`CAL_DC}; 	
 			
-	/*   Write/Read to FP_CH0_NF  */
-	if ((avalon_addr == FP_CH0_NF_ADDR) & (avalon_write_o == 1) ) 
-			`FP_CH0_NF <= avalon_writedata; 
-	if ((avalon_addr == FP_CH0_NF_ADDR) & (avalon_read_o == 1) ) 
-			dout <= `FP_CH0_NF;  
-			
 	/*   Write/Read to FP_CH1_NF  */
 	if ((avalon_addr == FP_CH1_NF_ADDR) & (avalon_write_o == 1) ) 
 			`FP_CH1_NF <= avalon_writedata; 
 	if ((avalon_addr == FP_CH1_NF_ADDR) & (avalon_read_o == 1) ) 
-			dout <= `FP_CH1_NF;
+			dout <= `FP_CH1_NF;  
 			
 	/*   Write/Read to FP_CH2_NF  */
 	if ((avalon_addr == FP_CH2_NF_ADDR) & (avalon_write_o == 1) ) 
@@ -700,18 +699,24 @@ always@(posedge SYS_CLK)
 			`FP_CH3_NF <= avalon_writedata; 
 	if ((avalon_addr == FP_CH3_NF_ADDR) & (avalon_read_o == 1) ) 
 			dout <= `FP_CH3_NF;
+			
+	/*   Write/Read to FP_CH4_NF  */
+	if ((avalon_addr == FP_CH4_NF_ADDR) & (avalon_write_o == 1) ) 
+			`FP_CH4_NF <= avalon_writedata; 
+	if ((avalon_addr == FP_CH4_NF_ADDR) & (avalon_read_o == 1) ) 
+			dout <= `FP_CH4_NF;
 
-	/*   Write/Read to CH0_ADC_OFFSET (HJ)  */
-	if ((avalon_addr == CH0_ADC_OFFSET_ADDR) & (avalon_write_o == 1) ) 
-			`CH0_ADC_OFFSET <= avalon_writedata[15:0]; 
-	if ((avalon_addr == CH0_ADC_OFFSET_ADDR) & (avalon_read_o == 1) ) 
-			dout <= {16'b0,`CH0_ADC_OFFSET};  	
-	
-	/*   Write/Read to CH1_ADC_OFFSET  (HJ) */
+	/*   Write/Read to CH1_ADC_OFFSET (HJ)  */
 	if ((avalon_addr == CH1_ADC_OFFSET_ADDR) & (avalon_write_o == 1) ) 
 			`CH1_ADC_OFFSET <= avalon_writedata[15:0]; 
 	if ((avalon_addr == CH1_ADC_OFFSET_ADDR) & (avalon_read_o == 1) ) 
 			dout <= {16'b0,`CH1_ADC_OFFSET};  	
+	
+	/*   Write/Read to CH2_ADC_OFFSET  (HJ) */
+	if ((avalon_addr == CH2_ADC_OFFSET_ADDR) & (avalon_write_o == 1) ) 
+			`CH2_ADC_OFFSET <= avalon_writedata[15:0]; 
+	if ((avalon_addr == CH2_ADC_OFFSET_ADDR) & (avalon_read_o == 1) ) 
+			dout <= {16'b0,`CH2_ADC_OFFSET};  	
 			
 			
 	/*   Write/Read to FP_KXY  */
@@ -738,17 +743,17 @@ always@(posedge SYS_CLK)
 	if ((avalon_addr == Y_OFFSET_ADDR) & (avalon_read_o == 1) ) 
 			dout <= {16'b0,`Y_OFFSET};  
 		
-				 /*   Write/Read to MODULE_ID0  */
-	if ((avalon_addr == MODULE_ID0_ADDR) & (avalon_write_o == 1) ) 
-			`MODULE_ID0 <= avalon_writedata; 
-	if ((avalon_addr == MODULE_ID0_ADDR) & (avalon_read_o == 1) ) 
-			dout <= `MODULE_ID0;  
-	
-   			 /*   Write/Read to MODULE_ID1  */
+				 /*   Write/Read to MODULE_ID1  */
 	if ((avalon_addr == MODULE_ID1_ADDR) & (avalon_write_o == 1) ) 
 			`MODULE_ID1 <= avalon_writedata; 
 	if ((avalon_addr == MODULE_ID1_ADDR) & (avalon_read_o == 1) ) 
-			dout <= `MODULE_ID1;  			
+			dout <= `MODULE_ID1;  
+	
+   			 /*   Write/Read to MODULE_ID2  */
+	if ((avalon_addr == MODULE_ID2_ADDR) & (avalon_write_o == 1) ) 
+			`MODULE_ID2 <= avalon_writedata; 
+	if ((avalon_addr == MODULE_ID2_ADDR) & (avalon_read_o == 1) ) 
+			dout <= `MODULE_ID2;  			
 			
 end //else
 
@@ -794,38 +799,30 @@ always @ (posedge DCLK) begin
 	end	
 end
 
-wire [DATA_WIDTH-1:0] Ch0_Din_FIR, Ch1_Din_FIR;
-wire [DATA_WIDTH-1:0] Ch0_Din/*synthesis keep*/;
-wire [DATA_WIDTH-1:0] Ch1_Din/*synthesis keep*/; 
+wire [DATA_WIDTH-1:0] Ch1_Din_FIR, Ch2_Din_FIR;
+wire [DATA_WIDTH-1:0] Ch1_Din/*synthesis keep*/;
 wire [DATA_WIDTH-1:0] Ch2_Din/*synthesis keep*/; 
 wire [DATA_WIDTH-1:0] Ch3_Din/*synthesis keep*/; 
+wire [DATA_WIDTH-1:0] Ch4_Din/*synthesis keep*/; 
 
 // ----------------------- Filter and store raw data ------------------------------
 
 // Input FIR bandpass filters to clean up raw ADC data.
-FIR BPF0(
-    .clk(SCLK),
-    .reset(SYS_RST),
-	 .ena_gain(1'b1), 
-    .data_in(Ch0_ADC_DATA),
-    .data_out(Ch0_Din_FIR)
-    );
-
 FIR BPF1(
     .clk(SCLK),
     .reset(SYS_RST),
-	 .ena_gain(1'b1),
+	 .ena_gain(1'b1), 
     .data_in(Ch1_ADC_DATA),
     .data_out(Ch1_Din_FIR)
-    );	 
+    );
 
 FIR BPF2(
     .clk(SCLK),
     .reset(SYS_RST),
-	 .ena_gain(1'b1), 
+	 .ena_gain(1'b1),
     .data_in(Ch2_ADC_DATA),
     .data_out(Ch2_Din_FIR)
-    );
+    );	 
 
 FIR BPF3(
     .clk(SCLK),
@@ -833,14 +830,22 @@ FIR BPF3(
 	 .ena_gain(1'b1), 
     .data_in(Ch3_ADC_DATA),
     .data_out(Ch3_Din_FIR)
+    );
+
+FIR BPF4(
+    .clk(SCLK),
+    .reset(SYS_RST),
+	 .ena_gain(1'b1), 
+    .data_in(Ch4_ADC_DATA),
+    .data_out(Ch4_Din_FIR)
     );	 
 	 
-assign Ch0_Din = ena_avg? Ch0_Din_FIR: {Ch0_ADC_DATA[13],Ch0_ADC_DATA[13],Ch0_ADC_DATA};
 assign Ch1_Din = ena_avg? Ch1_Din_FIR: {Ch1_ADC_DATA[13],Ch1_ADC_DATA[13],Ch1_ADC_DATA};
 assign Ch2_Din = ena_avg? Ch2_Din_FIR: {Ch2_ADC_DATA[13],Ch2_ADC_DATA[13],Ch2_ADC_DATA};
 assign Ch3_Din = ena_avg? Ch3_Din_FIR: {Ch3_ADC_DATA[13],Ch3_ADC_DATA[13],Ch3_ADC_DATA};
+assign Ch4_Din = ena_avg? Ch4_Din_FIR: {Ch4_ADC_DATA[13],Ch4_ADC_DATA[13],Ch4_ADC_DATA};
 
-wire [FULL_WIDTH-1:0] channel_din = {Ch3_Din,Ch2_Din,Ch1_Din,Ch0_Din}; // 64 bit signal with raw data for all 4 channels.
+wire [FULL_WIDTH-1:0] channel_din = {Ch4_Din,Ch3_Din,Ch2_Din,Ch1_Din}; // 64 bit signal with raw data for all 4 channels.
 wire [FULL_WIDTH-1:0] channel_dout; // 64 bit signal with 4 channel data for fast FIFO. Can be raw data or demodulated data, depending on waveform_select.
 
 //all four channels circular buffer frozen by trig at the same time, 
@@ -848,10 +853,10 @@ wire [FULL_WIDTH-1:0] channel_dout; // 64 bit signal with 4 channel data for fas
 //wire [FULL_WIDTH-1:0] Amp;  //64 bit , 4 channel amplitude data
 wire [DATA_WIDTH-1:0] channel_error;
 wire [DATA_WIDTH-1:0] Amp_avg/*synthesis keep*/;
-wire [SF_WIDTH-1:0] fp_ch0_Amp; // FP format, Demodulated waveform 
-wire [SF_WIDTH-1:0] fp_ch1_Amp;
+wire [SF_WIDTH-1:0] fp_ch1_Amp; // FP format, Demodulated waveform 
 wire [SF_WIDTH-1:0] fp_ch2_Amp;
 wire [SF_WIDTH-1:0] fp_ch3_Amp;
+wire [SF_WIDTH-1:0] fp_ch4_Amp;
 
 
 // ----------------------- Convert raw data into demodulated signal ------------------------------
@@ -877,10 +882,10 @@ channel_block Ch_XY_inst(
  .error(channel_error),
  .d_clk(d_clk), //clk for decimated signal
  .Amp_avg(Amp_avg), //16bit int, avg of 4 channel signanl, used as trigger input
- .fp_ch0_Amp(fp_ch0_Amp), // Demodulated waveform , in same data rate as din
- .fp_ch1_Amp(fp_ch1_Amp),
+ .fp_ch1_Amp(fp_ch1_Amp), // Demodulated waveform , in same data rate as din
  .fp_ch2_Amp(fp_ch2_Amp),
- .fp_ch3_Amp(fp_ch3_Amp)
+ .fp_ch3_Amp(fp_ch3_Amp),
+ .fp_ch4_Amp(fp_ch4_Amp)
 );
 
 
@@ -888,7 +893,7 @@ channel_block Ch_XY_inst(
 
 wire [FULL_WIDTH-1:0] signal_delayed_X;
 alignment align_X(
-	.signal({fp_ch1_Amp,fp_ch0_Amp}), //demodulated signal
+	.signal({fp_ch2_Amp,fp_ch1_Amp}), //demodulated signal
 	.gate(gate), 
 	.transition(), //not in use 
 	.clk(DCLK), //clock is ADC_clk/8 = 2.5 MHz 
@@ -899,7 +904,7 @@ alignment align_X(
 
 wire [FULL_WIDTH-1:0] signal_delayed_Y;
 alignment align_Y(
-	.signal({fp_ch3_Amp,fp_ch2_Amp}), //demodulated signal
+	.signal({fp_ch4_Amp,fp_ch3_Amp}), //demodulated signal
 	.gate(gate), 
 	.transition(), //not in use 
 	.clk(DCLK), //clock is ADC_clk/8 = 2.5 MHz 
@@ -952,8 +957,8 @@ calculate_position cal_position_X(
 	.B_amp(signal_delayed_X[63:32]),//
 	.data_valid(), 
 	.OFFSET(`X_OFFSET),//offset adjust, um
-	.FP_CH0_NF(`FP_CH0_NF), //gain compensation, around 1.0
-	.FP_CH1_NF(`FP_CH1_NF), //
+	.FP_CH0_NF(`FP_CH1_NF), //gain compensation, around 1.0
+	.FP_CH1_NF(`FP_CH2_NF), //
 	.FP_KXY(`FP_KXY), // 32 bit fp, BPM sensitivity, i.g. 0.42 dB/mm for ISAC BPM
 	.is10mmpV(is10mmpV), //10mm/V or 1mm/V DAC
 	.AVG_select(AVG_select), //Not in use, March 8,2023
@@ -961,8 +966,8 @@ calculate_position cal_position_X(
 	.rst(maxmin_rst),
 	.gate(new_gate), //only calculate position inside this signal
    .IIR_OUT_K2(`IIR_OUT_K2),	
-	.CH0_ADC_OFFSET(`CH0_ADC_OFFSET), // HJ Nov 27, 2023
-	.CH1_ADC_OFFSET(`CH1_ADC_OFFSET), // HJ Nov 27, 2023
+	.CH0_ADC_OFFSET(`CH1_ADC_OFFSET), // HJ Nov 27, 2023
+	.CH1_ADC_OFFSET(`CH2_ADC_OFFSET), // HJ Nov 27, 2023
 	.cal_sel(cal_sel),
 	.clk_10Hz(clk_10Hz),
 	.A_comp(peak_A),
@@ -981,8 +986,8 @@ calculate_position cal_position_Y(
 	.B_amp(signal_delayed_Y[63:32]),//
 	.data_valid(), 
 	.OFFSET(`Y_OFFSET),//offset adjust, um
-	.FP_CH0_NF(`FP_CH2_NF), //gain compensation, around 1.0
-	.FP_CH1_NF(`FP_CH3_NF), //
+	.FP_CH0_NF(`FP_CH3_NF), //gain compensation, around 1.0
+	.FP_CH1_NF(`FP_CH4_NF), //
 	.FP_KXY(`FP_KXY), // 32 bit fp, BPM sensitivity, i.g. 0.42 dB/mm for ISAC BPM
 	.is10mmpV(is10mmpV), //10mm/V or 1mm/V DAC
 	.AVG_select(AVG_select), //Not in use, March 8,2023
@@ -1011,8 +1016,8 @@ calculate_position cal_position_Y(
 	.B_amp(ch3),//16 bit, amplitude signal 
 	.data_valid(), 
 	.OFFSET(`Y_OFFSET),//offset adjust, um
-	.FP_CH0_NF(`FP_CH2_NF), //gain compensation, around 1.0
-	.FP_CH1_NF(`FP_CH3_NF), //
+	.FP_CH1_NF(`FP_CH3_NF), //gain compensation, around 1.0
+	.FP_CH2_NF(`FP_CH4_NF), //
 	.FP_KXY(`FP_KXY), // 32 bit fp, BPM sensitivity, i.g. 0.42 dB/mm for ISAC BPM
 	.is10mmpV(is10mmpV), //10mm/V or 1mm/V DAC
 	.AVG_select(AVG_select), //Not in use, March 8,2023

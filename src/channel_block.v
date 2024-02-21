@@ -38,10 +38,10 @@ module channel_block(
  output d_clk, //clk for Amp, decimated, ~ 2.5 MHz, if R = 8
  
  output [DATA_WIDTH-1:0] Amp_avg,  // 16 bit int, Avg of 4 channel signal
- output reg [SF_WIDTH-1:0] fp_ch0_Amp, // FP format, Demodulated waveform , in same data rate as din
- output reg [SF_WIDTH-1:0] fp_ch1_Amp,
+ output reg [SF_WIDTH-1:0] fp_ch1_Amp, // FP format, Demodulated waveform , in same data rate as din
  output reg [SF_WIDTH-1:0] fp_ch2_Amp,
- output reg [SF_WIDTH-1:0] fp_ch3_Amp
+ output reg [SF_WIDTH-1:0] fp_ch3_Amp,
+ output reg [SF_WIDTH-1:0] fp_ch4_Amp
  
 );
 
@@ -63,10 +63,10 @@ wire of3, nan3;
 wire [DATA_WIDTH:0] Amp_sum  = ch0 + ch1; 
 assign Amp_avg = Amp_sum[DATA_WIDTH:1]; //divided by 2
 
-altfp_fp2int conv_inst0(.dataa(fp_ch0_Amp),.clock(DCLK),.result(ch0), .overflow(of0), .nan(nan0));
-altfp_fp2int conv_inst1(.dataa(fp_ch1_Amp),.clock(DCLK),.result(ch1), .overflow(of1), .nan(nan1));
-altfp_fp2int conv_inst2(.dataa(fp_ch2_Amp),.clock(DCLK),.result(ch2), .overflow(of2), .nan(nan2));
-altfp_fp2int conv_inst3(.dataa(fp_ch3_Amp),.clock(DCLK),.result(ch3), .overflow(of3), .nan(nan3));
+altfp_fp2int conv_inst0(.dataa(fp_ch1_Amp),.clock(DCLK),.result(ch0), .overflow(of0), .nan(nan0));
+altfp_fp2int conv_inst1(.dataa(fp_ch2_Amp),.clock(DCLK),.result(ch1), .overflow(of1), .nan(nan1));
+altfp_fp2int conv_inst2(.dataa(fp_ch3_Amp),.clock(DCLK),.result(ch2), .overflow(of2), .nan(nan2));
+altfp_fp2int conv_inst3(.dataa(fp_ch4_Amp),.clock(DCLK),.result(ch3), .overflow(of3), .nan(nan3));
 
 assign CB_din = (waveform_select == 0)? din : 
 					 (waveform_select == 1)? Amp : din;
@@ -118,28 +118,28 @@ DDC DDC_inst(
 	.d_clk(d_clk), //clk for output data
 	.clken(clken), //for output data
 	.error(DDC_error), 
-	.fp_ch0_Amp(fp_ch0_buf), // Demodulated waveform , in same data rate as din
-	.fp_ch1_Amp(fp_ch1_buf),
-	.fp_ch2_Amp(fp_ch2_buf),
-	.fp_ch3_Amp(fp_ch3_buf)
+	.fp_ch1_Amp(fp_ch0_buf), // Demodulated waveform , in same data rate as din
+	.fp_ch2_Amp(fp_ch1_buf),
+	.fp_ch3_Amp(fp_ch2_buf),
+	.fp_ch4_Amp(fp_ch3_buf)
     );
 
 	 
 always @ (posedge DCLK) 
 	begin
-	   fp_ch0_Amp <= fp_ch0_buf; 
-		fp_ch1_Amp <= fp_ch1_buf; 
-		fp_ch2_Amp <= fp_ch2_buf; 
-		fp_ch3_Amp <= fp_ch3_buf; 		
+	   fp_ch1_Amp <= fp_ch0_buf; 
+		fp_ch2_Amp <= fp_ch1_buf; 
+		fp_ch3_Amp <= fp_ch2_buf; 
+		fp_ch4_Amp <= fp_ch3_buf; 		
 	end
 
 
 //--------------------------------------------------------
 // compensation FIR
 /*
-COMP_FIR fir_0(.clk(DCLK), .in_valid(1'b1), .data_in(fp_ch0_buf), .data_out(fp_ch0_Amp));
-COMP_FIR fir_1(.clk(DCLK), .in_valid(1'b1), .data_in(fp_ch1_buf), .data_out(fp_ch1_Amp));
-COMP_FIR fir_2(.clk(DCLK), .in_valid(1'b1), .data_in(fp_ch2_buf), .data_out(fp_ch2_Amp));
-COMP_FIR fir_3(.clk(DCLK), .in_valid(1'b1), .data_in(fp_ch3_buf), .data_out(fp_ch3_Amp));
+COMP_FIR fir_0(.clk(DCLK), .in_valid(1'b1), .data_in(fp_ch0_buf), .data_out(fp_ch1_Amp));
+COMP_FIR fir_1(.clk(DCLK), .in_valid(1'b1), .data_in(fp_ch1_buf), .data_out(fp_ch2_Amp));
+COMP_FIR fir_2(.clk(DCLK), .in_valid(1'b1), .data_in(fp_ch2_buf), .data_out(fp_ch3_Amp));
+COMP_FIR fir_3(.clk(DCLK), .in_valid(1'b1), .data_in(fp_ch3_buf), .data_out(fp_ch4_Amp));
 */
 endmodule
