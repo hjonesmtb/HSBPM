@@ -26,7 +26,6 @@ module calculate_position(
 	input [SF_WIDTH-1:0] FP_CH1_NF,
 	
 	input [SF_WIDTH-1:0] FP_KXY, //= Kx, Ky, BPM sensitivity
-	input is10mmpV, //10mm/V or 1mm/V DAC
 	input [1:0] AVG_select, //select AVG time for peak calculating
 	input clk,  //decimated clk: 2.5 MHz 
 	input rst,
@@ -59,16 +58,7 @@ parameter fp1 = 32'H3f800000; //1
 parameter fp100 = 32'H42c80000; //100
 parameter fpdot001 = 32'H3a83126f; //0.001
 
-//// (2^15-1)/10= 3276.7 dac/V, 16 bit DAC value for +/-10 V output range.
-//parameter R1  = 32'H454ccb33;  //3276.7*1=3276.7, mm -> dac for 1 mm/V
-//parameter R10 = 32'H43a3d5c3; //3276.7*1/10=327.67, mm -> dac for 10mm/V;
-
-//(2^16-1)/5= 13107 dac/V, 16 bit DAC value for 0-5 V output range.
-parameter R1  = 32'H464ccc00;  //13107 in floating point, mm -> dac for 1 mm/V
-parameter R10 = 32'H44a3d666; //1310.7 in floating point, mm -> dac for 10mm/V;
-
 reg [SF_WIDTH-1:0] ch0_Amp, ch1_Amp/*synthesis keep*/;
-wire [SF_WIDTH-1:0] kdac = is10mmpV? R10 : R1;
 wire [SF_WIDTH-1:0] fp_X_OFFSET, fpCH0_OFFSET, fpCH1_OFFSET, Kxy,delta, sigma;
 wire [SF_WIDTH-1:0] A,B,C,D,fpOFFSETmm,fp_pos_dac,fp_pos_mm/*synthesis keep*/;
 wire sigma_zero;
@@ -76,12 +66,9 @@ wire [SF_WIDTH-1:0] sigma_div = sigma_zero? fp1 : sigma;
 
 wire [SF_WIDTH-1:0] A_gained, B_gained;
 
-//wire [SF_WIDTH-1:0] A_over_B; // = A/B
 reg [SF_WIDTH-1:0] A_scale, B_scale; // calibration values for each channel
 
 reg [SF_WIDTH-1:0] X_cal;
- 
-//altfp_div3232 div_inst1 (.dataa(ch0_Amp), . datab(ch1_Amp), .clock(clk), .result(A_over_B));   // ratio = A/B
 
 always @ (posedge clk) 
 	begin
@@ -122,9 +109,7 @@ Maxmin maxmin_inst(
 	.max_B(B_max),
    .min_B(B_min)
     );	
-	
-//parameter kscale = 32'H4c800000;  // sf 2^26,  scaling
-//parameter dhigh = 32'H00007fff; // c32 2^15-1 dac, the DAC high saturation value
+
 
 //altfp_16int2fp int2fpconv_inst1 (.dataa(avg_A), .clock(clk), .result(A)); // to floating point
 //altfp_16int2fp int2fpconv_inst2 (.dataa(avg_B), .clock(clk), .result(B)); // to floating point
@@ -159,10 +144,6 @@ altfp_mul mul_inst5 (.dataa(Kxy), .datab(C), .clock(clk), .result(D) ); //D is p
 //adjust offset. 7 clks
 altfp_mul mul_inst6 (.dataa(fp_X_OFFSET), .datab(fpdot001), .clock(clk), .result(fpOFFSETmm) );  //um to mm
 altfp_add add_inst4(.dataa(D), .datab(fpOFFSETmm), .clock(clk), .result(fp_pos_mm) );// fp position in mm
-
-//16 bit DAC value, +/-10V, 1mm/V, or 10mm/V
-//altfp_mul mul_inst7 (.dataa(fp_pos_mm), .datab(kdac), .clock(clk), .result(fp_pos_dac) );  
-//altfp_fp2int fp2int_inst3(.dataa(fp_pos_dac), .clock(clk), .result(position));
 
 // Tc = tao*T = [-1/ln(K2)] * T
 // tao = 1/(2Pi*Fc), Fc: 3dB BW of the LPF

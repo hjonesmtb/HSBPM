@@ -89,14 +89,14 @@ module DE10_NANO_SoC_GHRD(
 
 	 //////////// GPIO //////////
 	 
-	 input GPIO_1_0,  // Trigger
-	 output GPIO_1_1, //
-	 output GPIO_1_2, //
-	 output GPIO_1_3, //
+	 input GPIO_1_0,  // ext_trigger
+	 output GPIO_1_1, // ATTEN_A0 (for calibration source)
+	 output GPIO_1_2, // clk_10Hz (for calibration source) 
+	 output GPIO_1_3, // ATTEN_A1 (for calibration source) 
 
-	 output GPIO_1_4, //VGA_GAIN_A1
-	 output GPIO_1_7, //VGA_GAIN_A0
-	 output GPIO_1_5, //ST_ON
+	 output GPIO_1_4, // ATTEN_EN (VGA)               
+	 output GPIO_1_5, // GAIN_EN  (VGA)						
+	 output GPIO_1_7, // ST_EN    (1127 Hz duty cycle) - currently VGA_GAIN_A0
 	 
 	//ADC 
 	// Channel 2 
@@ -237,18 +237,25 @@ assign fpga_clk_50 = FPGA_CLK1_50;
 assign stm_hw_events = {{15{1'b0}}, SW, fpga_led_internal, fpga_debounced_buttons};
 
 
-/////////////////// GPIO pin mapping ://///////////////////////////////////////////////////////////////////
-//GPIO mapping start:
+// ========================= GPIO Pin Mapping ===============================
+wire ATTEN_A0, ATTEN_A1; // attenuation bits for calibration source
+wire GAIN_EN, ATTEN_EN; // gain, attenuation enable for VGA (+15 dB, -18 dB)
+wire ST_EN; // 1126 Hz duty cycle for calibration source
+
+assign GPIO_1_3 = ATTEN_A1; // enable/disable -20 dB attenuation of calibration signal
+assign GPIO_1_1 = ATTEN_A0; // enable/disable -10 dB attenuation of calibration signal
+assign GPIO_1_2 = clk_10Hz; // enable/disable calibration 
+assign GPIO_1_5 = GAIN_EN;  // enable/disable VGA gain
+assign GPIO_1_4 = ATTEN_EN; // enable/disable VGA attenuation
+assign GPIO_1_7 = ST_EN;    // Modulate calibration signal
+
 wire ext_trigger = GPIO_1_0;	 
+
 wire LED_RUNNING;
 wire LED_Fault = Cold_Reset_Req;
 wire Cold_Reset_Req = ~GPIO_0_32;  //cold reset push button from front panel 
 assign GPIO_0_34 = LED_RUNNING;  //LED_COMM, indicating communication activity, not implemented yet.
 assign GPIO_0_35 = LED_Fault;  //should response to reset_push button action? 
-
-wire VGA_GAIN_A1,VGA_GAIN_A0;
-assign GPIO_1_4 = VGA_GAIN_A1;
-assign GPIO_1_7 = VGA_GAIN_A0;
 
 //ADC interface
 wire [13:0] ADC_DA,ADC_DB,ADC_DC,ADC_DD;
@@ -315,13 +322,10 @@ assign ADC_DD[10] = GPIO_0_10; //ADC_DD10
 assign ADC_DD[11] = GPIO_0_13; //ADC_DD11
 assign ADC_DD[12] = GPIO_0_12; //ADC_DD12
 assign ADC_DD[13] = GPIO_0_15; //ADC_DD13
-
-////GPIO mapping end/////////////////////////////////
 	
 // clock generation
 	
 reg ST_on;	// This signal controls the input selector switch on the AFE. 
-assign GPIO_1_5 = clk_10Hz; // Slightly advanced copy of ST_ON.  
 	
 wire pll_locked; 
 wire SYS_RST = ~hps_fpga_reset_n;
@@ -572,30 +576,30 @@ soc_system u0(
 //							================ Configuration Register ===============
 wire [15:0] status_reg = {channel_error[7:0],pll_locked,No_beam};
 
-assign VGA_GAIN_A0 = `CON_REG_L[0];// CHANGE FOR V3
-assign VGA_GAIN_A1 = `CON_REG_L[1];// CHANGE FOR V3
-
+assign GAIN_EN = `CON_REG_L[0];// CHANGE IN LABVIEW
+assign ATTEN_EN = `CON_REG_L[1];// CHANGE IN LABVIEW
 wire ch_select = `CON_REG_L[2];
-assign ADC_clksel =  `CON_REG_L[3]; //select external clk or internal 23 Mhz clk
-wire waveform_select = `CON_REG_L[4];
+assign ADC_clksel =  `CON_REG_L[3]; //select external clk or internal 20 Mhz clk
+wire waveform_select = `CON_REG_L[4]; // select 
 //`CON_REG[5]: not used for now.
 wire Ena_ST = `CON_REG_L[6];
 wire auto_trig_sel = `CON_REG_L[7];
 
 wire ena_avg = `CON_REG_H[1]; //enable input FIR
-wire is10mmpV = `CON_REG_H[2]; //DAC ratio: 10mm /V, or 1mm/V
-wire [1:0] AVG_select = `CON_REG_H[4:3]; //Averaging times: 4,16,32, 64 four selections
+// `CON_REG_H[2]: not used
+assign ATTEN_A0 = `CON_REG_H[3]; // autocalibration signal amplitude
+assign ATTEN_A1 = `CON_REG_H[4]; // autocalibration signal amplitude
 wire cal_sel = `CON_REG_H[5]; // choose calibration. 1 for autocal, 0 for manual
 
-wire pulse1KHz,auto_trig; 
+wire auto_trig; 
 wire DAC_update = trig; //changed from auto_trig. HJ Nov 29, 2023
 
-// Generate 1126 Hz test pulse with a given duty cycle. CHANGE FOR V3 - pulse1KHz should be assimilated with ST_en (not ST_on) somehow.
+// Generate 1126 Hz test pulse with a given duty cycle.
 Self_Test Self_Test_inst(
 					.clk(SYS_CLK),
 					.Dcycle(`CAL_DC),
 					.trig(auto_trig), // mark the start of pulse.
-					.pulse(pulse1KHz) // 1126 Hz pulse
+					.pulse(ST_EN) // 1126 Hz pulse
 					);
 
 //							================ CPU to FPGA Communication ===============
@@ -960,7 +964,6 @@ calculate_position cal_position_X(
 	.FP_CH0_NF(`FP_CH1_NF), //gain compensation, around 1.0
 	.FP_CH1_NF(`FP_CH2_NF), //
 	.FP_KXY(`FP_KXY), // 32 bit fp, BPM sensitivity, i.g. 0.42 dB/mm for ISAC BPM
-	.is10mmpV(is10mmpV), //10mm/V or 1mm/V DAC
 	.AVG_select(AVG_select), //Not in use, March 8,2023
 	.clk(DCLK),  
 	.rst(maxmin_rst),
@@ -989,7 +992,6 @@ calculate_position cal_position_Y(
 	.FP_CH0_NF(`FP_CH3_NF), //gain compensation, around 1.0
 	.FP_CH1_NF(`FP_CH4_NF), //
 	.FP_KXY(`FP_KXY), // 32 bit fp, BPM sensitivity, i.g. 0.42 dB/mm for ISAC BPM
-	.is10mmpV(is10mmpV), //10mm/V or 1mm/V DAC
 	.AVG_select(AVG_select), //Not in use, March 8,2023
 	.clk(DCLK),  
 	.rst(maxmin_rst),
