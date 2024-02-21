@@ -13,7 +13,6 @@
 // 
 //-----------------------------
 
-//parameter FPGA_VERSION_NO = 32'd20221018; //nn_yyyy_mm_dd: AETE nn=00;
 //parameter FPGA_VERSION_NO = 32'd0047; //verification
 parameter FPGA_VERSION_NO = 32'd20240123; // Modified on jan 23, 2024
 
@@ -317,17 +316,20 @@ assign ADC_DD[13] = GPIO_0_15; //ADC_DD13
 	
 // clock generation
 	
-reg ST_on;   //turn on self-test built-in 46MHz osccilator, could be turn-on and off to get pulsed 46Mhz siganl
-assign GPIO_1_5 = clk_10Hz;
+reg ST_on;	// This signal controls the input selector switch on the AFE. 
+assign GPIO_1_5 = clk_10Hz; // Slightly advanced copy of ST_ON.  
 	
-wire pll_locked; //this signal could be used to initialize ADC?
+wire pll_locked; 
 wire SYS_RST = ~hps_fpga_reset_n;
 
-wire SYS_CLK;
-wire ex_CLK,self_CLK,syn_CLK,Sampling_CLK;
+wire SYS_CLK; // 50 MHz clock, locked to internal FPGA clock.
+wire self_CLK; // 20 MHz clock, locked to internal FPGA clock.
+wire ex_CLK; // Buffered copy of 23.05 MHz LO.
+wire syn_CLK; // 20 MHz clock, locked to LO.
+wire Sampling_CLK; // 20 MHz sampling clock for ADC. Either syn_CLK or self_CLK.
 
 assign ADC_CLK = Sampling_CLK; //ADC clock 20 MHz, for AD9248-20.
-wire SCLK = Sampling_CLK; //processing clk.
+wire SCLK = Sampling_CLK; //processing clock.
 
 wire ADC_clksel;
 
@@ -364,7 +366,7 @@ clk_sel clk_sel_inst
 	 );
 
 wire d_clk; 
-wire DCLK/*synthesis keep*/; //clk for demodulated envelop signal
+wire DCLK/*synthesis keep*/; //2.5 MHz clk for demodulated envelop signal
 
 clk_control clkbuf_inst  //buf to GCLK network 
 	(
@@ -372,17 +374,16 @@ clk_control clkbuf_inst  //buf to GCLK network
 	 .outclk(DCLK)
 	 );
 	
-	 
-//////////////////////////////////////////////////////////////////////	
+
 reg [ADC_DATA_WIDTH-1:0] Ch0_ADC_DATA,	Ch1_ADC_DATA,Ch2_ADC_DATA,	Ch3_ADC_DATA/*synthesis keep*/;
-//AD9248-20, data output format = two's compl.
+// Sample 14 bit parallel ADC (AD9248-20). Data output format = two's compl.
 always @ (posedge ADC_CLK) 
 	begin 
 		Ch0_ADC_DATA <= ADC_DA; Ch1_ADC_DATA <= ADC_DB; 
 		Ch2_ADC_DATA <= ADC_DC; Ch3_ADC_DATA <= ADC_DD;
 	end
 
-//I2C eeprom interface ////////////////////////////////////
+//							================ I2C EEPROM Interface ===============
 parameter CONF_BUF_SIZE = 128; //max = 128 bytes for 24AA025E48T
 
 reg  [7:0] configuration [CONF_BUF_SIZE-1:0]; //configuration data 
@@ -407,9 +408,9 @@ wire rd_eeprom,wr_eeprom /*synthesis keep*/;
                      );
 							
 
-							//================ Defining CPU to FPGA interface ===============
-//Avalon Memory Mapped Slave Bus declariation	
+//							================ Defining CPU to FPGA interface ===============
 
+//Avalon Memory Mapped Slave Bus declariation	
 wire avalon_read, avalon_write,avalon_cs/*synthesis keep*/;
 wire [31:0] avalon_addr,avalon_readdata,avalon_writedata/*synthesis keep*/;
 
@@ -459,8 +460,8 @@ parameter integer 	CH2_DAC_AVG_OFFSET_ADDR = 52;
 	
 parameter integer MODULE_ID0_ADDR = 71;
 parameter integer MODULE_ID1_ADDR = 72;	
-//=======================================================
-//=======================================================
+
+//===========================  Avalon Bus interface 	============================ 
 soc_system u0(
                //Clock&Reset
                .clk_clk(FPGA_CLK1_50),                                      //                            clk.clk
@@ -561,11 +562,13 @@ soc_system u0(
 				
            );
 
-//Avalon Bus interface 	
+
+
+//							================ Configuration Register ===============
 wire [15:0] status_reg = {channel_error[7:0],pll_locked,No_beam};
 
-assign VGA_GAIN_A0 = `CON_REG_L[0];
-assign VGA_GAIN_A1 = `CON_REG_L[1];
+assign VGA_GAIN_A0 = `CON_REG_L[0];// CHANGE FOR V3
+assign VGA_GAIN_A1 = `CON_REG_L[1];// CHANGE FOR V3
 
 wire ch_select = `CON_REG_L[2];
 assign ADC_clksel =  `CON_REG_L[3]; //select external clk or internal 23 Mhz clk
@@ -582,13 +585,15 @@ wire cal_sel = `CON_REG_H[5]; // choose calibration. 1 for autocal, 0 for manual
 wire pulse1KHz,auto_trig; 
 wire DAC_update = trig; //changed from auto_trig. HJ Nov 29, 2023
 
-Self_Test Self_Test_inst(.clk(SYS_CLK), .trig(auto_trig), .Dcycle(`CAL_DC),.pulse(pulse1KHz));
+// Generate 1126 Hz test pulse with a given duty cycle. CHANGE FOR V3 - pulse1KHz should be assimilated with ST_en (not ST_on) somehow.
+Self_Test Self_Test_inst(
+					.clk(SYS_CLK),
+					.Dcycle(`CAL_DC),
+					.trig(auto_trig), // mark the start of pulse.
+					.pulse(pulse1KHz) // 1126 Hz pulse
+					);
 
-
-//assign ST_on = Ena_ST & pulse1KHz;
-//assign ST_on = 1'b0;  //it seems this signal causes the SoC boot up failure!
-
-//---------------------------------------------------------------
+//							================ CPU to FPGA Communication ===============
 
 reg fifo_clr_reg; //needs to reset by itself after one SYS_CLK
 reg trip_clr_reg; //needs to be reset by itself after one SYS_CLK
@@ -612,9 +617,7 @@ always @ (posedge SYS_CLK)
 always @ (posedge SYS_CLK)
      avalon_read_o <= avalon_read_i;	  
 
-////////////////////////////////////////////////////////////////////////////	  
-//Registers and Configuration data write/read  
-	  
+//Registers and Configuration data write/read    
 always@(posedge SYS_CLK)
 	if (~eeprom_busy && eeprom_data_valid) 
 				configuration <= eeprom_buffer; 
@@ -749,13 +752,14 @@ always@(posedge SYS_CLK)
 			
 end //else
 
-////////////////////////////////////////////////////////////						
-//self trigger, SL, 20190222
+//							================ Self Trigger ===============					
+
 wire bpm_trig,gate,new_gate/* synthesis keep */; 
 wire No_beam;
 
 wire trig = auto_trig_sel? auto_trig : bpm_trig;
 
+// Generated trigger signal based on demodulated envelope amplitude
 self_trigger self_trigger_inst(
 	.signal(Amp_avg), 
 	.threshold(`TRIG_TH),
@@ -768,15 +772,12 @@ self_trigger self_trigger_inst(
 	
 );
 
-
-//================ processing ==============
+// ================ Processing ==============
 reg clk_10Hz; // 10Hz pulse with 0.8% duty cycle (0.8ms width)
 reg [21:0] count_10Hz; // count to 2.5 million
 
-
 // generate 10Hz period pulse, and an extended version (ST_on) to account for calculate_position latency
 always @ (posedge DCLK) begin
-	
 	count_10Hz <= count_10Hz + 1;
 	
 	if(count_10Hz == 25'd248000) begin
@@ -790,8 +791,7 @@ always @ (posedge DCLK) begin
 	else if(count_10Hz == 25'd250100)begin
 		count_10Hz <= 25'b0;
 		ST_on <= 1'b0;
-	end
-	
+	end	
 end
 
 wire [DATA_WIDTH-1:0] Ch0_Din_FIR, Ch1_Din_FIR;
@@ -800,10 +800,13 @@ wire [DATA_WIDTH-1:0] Ch1_Din/*synthesis keep*/;
 wire [DATA_WIDTH-1:0] Ch2_Din/*synthesis keep*/; 
 wire [DATA_WIDTH-1:0] Ch3_Din/*synthesis keep*/; 
 
+// ----------------------- Filter and store raw data ------------------------------
+
+// Input FIR bandpass filters to clean up raw ADC data.
 FIR BPF0(
     .clk(SCLK),
     .reset(SYS_RST),
-	 .ena_gain(1'b1), // this sig should come from DDC output
+	 .ena_gain(1'b1), 
     .data_in(Ch0_ADC_DATA),
     .data_out(Ch0_Din_FIR)
     );
@@ -811,7 +814,7 @@ FIR BPF0(
 FIR BPF1(
     .clk(SCLK),
     .reset(SYS_RST),
-	 .ena_gain(1'b1), // this sig should come from DDC output
+	 .ena_gain(1'b1),
     .data_in(Ch1_ADC_DATA),
     .data_out(Ch1_Din_FIR)
     );	 
@@ -819,7 +822,7 @@ FIR BPF1(
 FIR BPF2(
     .clk(SCLK),
     .reset(SYS_RST),
-	 .ena_gain(1'b1), // this sig should come from DDC output
+	 .ena_gain(1'b1), 
     .data_in(Ch2_ADC_DATA),
     .data_out(Ch2_Din_FIR)
     );
@@ -827,7 +830,7 @@ FIR BPF2(
 FIR BPF3(
     .clk(SCLK),
     .reset(SYS_RST),
-	 .ena_gain(1'b1), // this sig should come from DDC output
+	 .ena_gain(1'b1), 
     .data_in(Ch3_ADC_DATA),
     .data_out(Ch3_Din_FIR)
     );	 
@@ -837,8 +840,8 @@ assign Ch1_Din = ena_avg? Ch1_Din_FIR: {Ch1_ADC_DATA[13],Ch1_ADC_DATA[13],Ch1_AD
 assign Ch2_Din = ena_avg? Ch2_Din_FIR: {Ch2_ADC_DATA[13],Ch2_ADC_DATA[13],Ch2_ADC_DATA};
 assign Ch3_Din = ena_avg? Ch3_Din_FIR: {Ch3_ADC_DATA[13],Ch3_ADC_DATA[13],Ch3_ADC_DATA};
 
-wire [FULL_WIDTH-1:0] channel_din = {Ch3_Din,Ch2_Din,Ch1_Din,Ch0_Din};
-wire [FULL_WIDTH-1:0] channel_dout;
+wire [FULL_WIDTH-1:0] channel_din = {Ch3_Din,Ch2_Din,Ch1_Din,Ch0_Din}; // 64 bit signal with raw data for all 4 channels.
+wire [FULL_WIDTH-1:0] channel_dout; // 64 bit signal with 4 channel data for fast FIFO. Can be raw data or demodulated data, depending on waveform_select.
 
 //all four channels circular buffer frozen by trig at the same time, 
 //and start transfering waveform to fast_fifo at the same time.
@@ -849,6 +852,9 @@ wire [SF_WIDTH-1:0] fp_ch0_Amp; // FP format, Demodulated waveform
 wire [SF_WIDTH-1:0] fp_ch1_Amp;
 wire [SF_WIDTH-1:0] fp_ch2_Amp;
 wire [SF_WIDTH-1:0] fp_ch3_Amp;
+
+
+// ----------------------- Convert raw data into demodulated signal ------------------------------
 
 channel_block Ch_XY_inst(
  .clk(SCLK), //ADC clock
@@ -877,9 +883,9 @@ channel_block Ch_XY_inst(
  .fp_ch3_Amp(fp_ch3_Amp)
 );
 
-//--------- Align demodulated channel signal-----------------------------------------------------	 
 
-// it seems like both X and Y channels need to be aligned separately. So another alignment module will be needed.
+// Remove noisy transitions from demodulated signal. CHANGE FOR V3 - does each channel need it's own gate?
+
 wire [FULL_WIDTH-1:0] signal_delayed_X;
 alignment align_X(
 	.signal({fp_ch1_Amp,fp_ch0_Amp}), //demodulated signal
@@ -902,11 +908,14 @@ alignment align_Y(
 	.new_gate()
 );
 
+// ----------------------- Calculate beam position, and slow FIFO values ------------------------------
 
-//--------- Calculate peak, position and ..-----------------------------------------------------	 
-wire [SF_WIDTH-1:0] peak_A,peak_B,peak_C,peak_D,X_fp_pos,Y_fp_pos/*synthesis keep*/;
-wire [SF_WIDTH-1:0] X_fp_pos_uncal;
-wire [SF_WIDTH-1:0] max_A,max_B,min_A,min_B,max_C,max_D,min_C,min_D/*synthesis keep*/;
+wire [SF_WIDTH-1:0] peak_A,peak_B,peak_C,peak_D/*synthesis keep*/; // Slow FIFO values for demodulated envelopes
+wire [SF_WIDTH-1:0] X_fp_pos,Y_fp_pos/*synthesis keep*/; // slow FIFO values for beam position
+wire [SF_WIDTH-1:0] X_fp_pos_uncal; // uncalibrated beam position (no autocal)
+wire [SF_WIDTH-1:0] max_A,max_B,min_A,min_B,max_C,max_D,min_C,min_D/*synthesis keep*/; 
+
+// CHANGE FOR V3 - remove these signals.
 wire [DATA_WIDTH-1:0] Xdac, Ydac/* synthesis keep */; //16 bit position signed, two's complement. Modified (removed sign) Nov 23,2023
 wire signed [DATA_WIDTH-1:0] X_Position, Y_Position; //16 bit position signed, two's complement.
 
@@ -922,12 +931,13 @@ pulse_shaper pulse_inst(
 // if no beam, then no trig, and the "position" signal in the following module is not updated, but the DAC output has noise
 // which indicating the electronics is alive on Xtpage.
 
-// LPF TC = 0.434 ms, 9.5 ms,100 ms, 1000 ms, see "lpf_IIR.v"
+// LPF TC = 0.434 ms, 9.5 ms,100 ms, 1000 ms, see "lpf_IIR.v" CHANGE FOR V3 - remove these parameters.
 parameter fpd1 = 32'H3dcccccd; //0.1 in fp
 parameter fpd9 = 32'H3f666666; //0.9 in fp
 parameter fpd99 = 32'H3f7d70a4; //0.99 in fp
 parameter fpd999 = 32'H3f7fbe77; //0.999 in fp
 
+// CHANGE FOR V3 - These seem unused?
 wire [DATA_WIDTH-1:0] delayed_ch0,delayed_ch1/*synthesis keep*/;
 altfp_fp2int conv_inst0(.dataa(signal_delayed_X[31:0]), .clock(DCLK),.result(delayed_ch0));
 altfp_fp2int conv_inst1(.dataa(signal_delayed_X[63:32]),.clock(DCLK),.result(delayed_ch1));
@@ -935,7 +945,8 @@ altfp_fp2int conv_inst1(.dataa(signal_delayed_X[63:32]),.clock(DCLK),.result(del
 wire [DATA_WIDTH-1:0] delayed_ch2,delayed_ch3/*synthesis keep*/;
 altfp_fp2int conv_inst2(.dataa(signal_delayed_Y[31:0]), .clock(DCLK),.result(delayed_ch2));
 altfp_fp2int conv_inst3(.dataa(signal_delayed_Y[63:32]),.clock(DCLK),.result(delayed_ch3));
-								 
+
+// CHANGE FOR V3 - remove unused inputs from this module.	 
 calculate_position cal_position_X(
 	.A_amp(signal_delayed_X[31:0]), //
 	.B_amp(signal_delayed_X[63:32]),//
@@ -1019,9 +1030,8 @@ calculate_position cal_position_Y(
 	 
 */
 	 
-////////////////////////////////////////////////////////////
-//Fast FIFO to transfer ADC rate data from FPGA to SoC
-	
+//================ Fast FIFO to transfer 20 MHz data from FPGA to SoC ===================
+
 	wire fast_FIFO_rst = SYS_RST | fifo_clr_reg;
    wire fast_fifo_full, fast_fifo_empty;
 	
@@ -1045,7 +1055,7 @@ calculate_position cal_position_Y(
 		.wrusedw(fifo_word) //
 	);
 	
-///================ Slow FIFO ===================
+//================ Slow FIFO to transfer demodulated data from FPGA to SoC ===================
 
 	reg sFIFO_wr;
 	reg [SFIFO_WIDTH-1:0] sfifo_data_in;
@@ -1069,11 +1079,10 @@ calculate_position cal_position_Y(
 //	output [7:0]  wrusedw;
 // slfifo is 128 words(32bit) deep, Nov.29,2018
 	
-//============Packing=================================
+//============ Packing Slow FIFO=================================
 	parameter PID = 32'h4142504d; // "ABPM"
 	
 	reg [7:0] p_state;
-
 	
 	reg new_gate_last;
 	wire sfifo_trig;
@@ -1119,7 +1128,6 @@ calculate_position cal_position_Y(
 
 	end
 
-
 //=========== DHT11 sensor ========================
 
 reg [15:0] temp, humi;
@@ -1132,8 +1140,7 @@ dht11 temp_sensor(
 	.o_humi(humi)
 	);
 
-
-//========LED ============================
+//============== Status LED ============================
 reg comm_act;
 assign LED_RUNNING = comm_act;
 	

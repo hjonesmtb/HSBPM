@@ -2,9 +2,10 @@
  * DAC8811 interface
  * data rate : 1 MHz
  * Shengli Liu, June 17,2019
+ * Modified by HJ Nov 29, 2023
  * 
  */
-module DAC
+ module DAC
     (
         // Signals to DAC 
         output reg                      sdi,   // SPI data to DAC
@@ -60,21 +61,33 @@ begin
 		case (state)
 				state_idle:									
 					begin 
-						if (update) //if (start_conv )	
-						   begin  
-							   ss <= 0;	sr <= code; cnt <= 0; state <= state_cnv; 
+						if (update) begin  
+							   ss <= 0;
+								sr <= code;
+								cnt <= 0;
+								state <= state_cnv; 
 							end 
-						else begin ss <= 1; sclk <= 0; end 
+						else begin
+							ss <= 1;
+							sclk <= 0;
+							end 
 					
 					end
-///////////////////////////////////////////////////////////////////
 				state_cnv:  
 				   begin 			  
 			        sclk <= 0;
 					  sdi <= sr[DAC_WIDTH-1];
-					  if (cnt >= DAC_WIDTH) begin ss <= 1; state <= state_idle; end
-					  else begin cnt <= cnt + 1; state <= state_sclk_rise; end 	
-		         end 
+					  if (cnt >= DAC_WIDTH) 
+							begin 
+							ss <= 1;
+							state <= state_idle;
+							end
+					  else begin
+							cnt <= cnt + 1;
+							state <= state_sclk_rise;
+							end 	
+		        
+				  end 
 				state_sclk_rise:  
 					begin          					  
 					  sclk <= 1;

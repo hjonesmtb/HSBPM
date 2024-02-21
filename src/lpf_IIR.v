@@ -9,6 +9,7 @@
 // changed fixed point coeff. to floating point: K1,K2
 // I think the reason that Bill R's using the fixed point is it's easier to convert from real number.
 
+// total latency ~22 clks
 module LPF_IIR(
     input FCLK,
     input in_valid,   
@@ -61,11 +62,14 @@ wire NaN;
 assign X = data_in;
 assign data_out = Y;
 
+// 7 clks
 altfp_sub sub_inst1 (.dataa(fp1), .datab(K2), .clock(FCLK), .result(K1) ); // K1 = 1 - K2
 
+// 7 clks
 altfp_mul mul_inst1 (.dataa(X), .datab(K1), .clock(FCLK), .result(XK) );   
 altfp_mul mul_inst2 (.dataa(Y1), .datab(K2), .clock(FCLK), .result(Y1K) );    	 
 
+// 7 clks
 altfp_add add_inst1 (.dataa(XK), .datab(Y1K), .clock(FCLK), .result(Y), .nan(NaN) ); 
 
 always @(posedge FCLK)  
