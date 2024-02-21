@@ -1,3 +1,8 @@
+soc_system_fpga_cal.rbf (Jan 23)
+	added 46.1 Mhz clk on FPGA output for autocal
+
+soc_system_jan23.rbf
+	added a reset to autocal. increased freq from 1Hz --> 10Hz
 soc_system_cal_3.rbf (Jan 19)
 	autocalibration using subtraction from position. Seems to work quite well.
 

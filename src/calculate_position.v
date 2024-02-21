@@ -37,7 +37,7 @@ module calculate_position(
 	input [DATA_WIDTH-1:0] CH0_ADC_OFFSET,//offset adjust, ADC counts (HJ Nov 27,2023)
 	input [DATA_WIDTH-1:0] CH1_ADC_OFFSET,//offset adjust, ADC counts (HJ Nov 27,2023)
 	input cal_sel,
-	input clk_1Hz,
+	input clk_10Hz,
 	output [SF_WIDTH-1:0] A_comp,
 	output [SF_WIDTH-1:0] B_comp,
 	
@@ -46,7 +46,7 @@ module calculate_position(
 	output [SF_WIDTH-1:0] A_min,
 	output [SF_WIDTH-1:0] B_min,
 	
-	output	[SF_WIDTH-1:0] fp_pos_mm_LPF,
+	output [SF_WIDTH-1:0] fp_pos_mm_LPF,
 	output [SF_WIDTH-1:0] fp_pos_mm_cal // changed
 	
     );
@@ -96,12 +96,10 @@ always @ (posedge clk)
 			end		
 
 			if(cal_sel) begin
-				if(clk_1Hz) begin
+				if(clk_10Hz) begin
 					X_cal <= fp_pos_mm_LPF;
 					A_scale <= FP_CH0_NF;
 					B_scale <= FP_CH1_NF;	
-//					A_scale <= fp1;
-//					B_scale <= A_over_B;
 				end
 			end
 			else begin

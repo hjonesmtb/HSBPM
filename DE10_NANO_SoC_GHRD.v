@@ -8,12 +8,14 @@
 // notes: 
 // Oct 20,2022: Copied from E_linac_RF_shield_upgrade project
 // Nov 27, 2023:  - Added CHx_ADC_OFFSET parameters to account for channel offsets.
-//					   
+// Jan 05 2024 - added 15 tap FIR on ADC input to reduce noise. Filter has 4x gain to increase threshold.
+// Jan 09 2024 - Added vertical (Y) channel. Not working/tested yet.
+// 
 //-----------------------------
 
 //parameter FPGA_VERSION_NO = 32'd20221018; //nn_yyyy_mm_dd: AETE nn=00;
 //parameter FPGA_VERSION_NO = 32'd0047; //verification
-parameter FPGA_VERSION_NO = 32'd20240108; // Modified on jan 08, 2024
+parameter FPGA_VERSION_NO = 32'd20240123; // Modified on jan 23, 2024
 
 module DE10_NANO_SoC_GHRD(
 
@@ -245,9 +247,6 @@ wire VGA_GAIN_A1,VGA_GAIN_A0;
 assign GPIO_1_4 = VGA_GAIN_A1;
 assign GPIO_1_7 = VGA_GAIN_A0;
 
-reg ST_on;   //turn on self-test built-in 46MHz osccilator, could be turn-on and off to get pulsed 46Mhz siganl
-assign GPIO_1_5 = ST_on;
-
 //ADC interface
 wire [13:0] ADC_DA,ADC_DB,ADC_DC,ADC_DD;
 
@@ -317,7 +316,10 @@ assign ADC_DD[13] = GPIO_0_15; //ADC_DD13
 ////GPIO mapping end/////////////////////////////////
 	
 // clock generation
-
+	
+reg ST_on;   //turn on self-test built-in 46MHz osccilator, could be turn-on and off to get pulsed 46Mhz siganl
+assign GPIO_1_5 = clk_10Hz;
+	
 wire pll_locked; //this signal could be used to initialize ADC?
 wire SYS_RST = ~hps_fpga_reset_n;
 
@@ -785,7 +787,7 @@ always @ (posedge DCLK) begin
 		clk_10Hz <= 1'b0;
 	end
 	
-	else if(count_10Hz == 25'd250080)begin
+	else if(count_10Hz == 25'd250100)begin
 		count_10Hz <= 25'b0;
 		ST_on <= 1'b0;
 	end
