@@ -14,7 +14,11 @@
 #define BLOCK_SIZE 1024 //block transfer size for FAST FIFO
 #define PACKET_SIZE 28 //block transfer size for PACKET
 
-
+union b2f{
+	 int b;
+	 float f;
+} ;
+	
 static inline void writeReg(void* addr, uint32_t value)
 {
     *(uint32_t*) (addr) = value;
@@ -38,7 +42,15 @@ void Load_Conf()
 
 int cmd_proc(char *cmdString_in , int *value_back, char **string_back, int **array_Ptr, int *array_Dim)
 {
+
+
+	union b2f conv1;
+	union b2f conv2;
+	union b2f conv3;	
 		
+	float A = 0;
+	float B = 0;
+	
 	char cmd[50],*sdp,*chp;
 
   //uint32_t trash;
@@ -101,6 +113,16 @@ int cmd_proc(char *cmdString_in , int *value_back, char **string_back, int **arr
     		for(cntr=0;cntr<PACKET_SIZE;cntr++){
 				dataArray[cntr]= readReg(VR_BASE+SFIFO);	
 			}
+//			// New on Feb 22
+//			conv1.b= dataArray[2];
+//			conv2.b = dataArray[3];
+//			A = conv1.f;
+//			B = conv2.f;
+//			
+//			conv3.f = 85.7*(A-B)/(A+B);
+//			dataArray[6] = conv3.b;
+//			
+//			// end of new code
 			*array_Ptr = &dataArray[0]; *array_Dim = PACKET_SIZE;
     		return 3;}
 		

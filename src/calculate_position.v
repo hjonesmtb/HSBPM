@@ -26,13 +26,11 @@ module calculate_position(
 	input [SF_WIDTH-1:0] FP_CH1_NF,
 	
 	input [SF_WIDTH-1:0] FP_KXY, //= Kx, Ky, BPM sensitivity
-	input is10mmpV, //10mm/V or 1mm/V DAC
 	input [1:0] AVG_select, //select AVG time for peak calculating
 	input clk,  //decimated clk: 2.5 MHz 
 	input rst,
 	input gate, 
-   	
-	//input [SF_WIDTH-1:0] K1, //
+
 	input [SF_WIDTH-1:0] IIR_OUT_K2, //LPF K2, fp
 	input [DATA_WIDTH-1:0] CH0_ADC_OFFSET,//offset adjust, ADC counts (HJ Nov 27,2023)
 	input [DATA_WIDTH-1:0] CH1_ADC_OFFSET,//offset adjust, ADC counts (HJ Nov 27,2023)
@@ -59,16 +57,7 @@ parameter fp1 = 32'H3f800000; //1
 parameter fp100 = 32'H42c80000; //100
 parameter fpdot001 = 32'H3a83126f; //0.001
 
-//// (2^15-1)/10= 3276.7 dac/V, 16 bit DAC value for +/-10 V output range.
-//parameter R1  = 32'H454ccb33;  //3276.7*1=3276.7, mm -> dac for 1 mm/V
-//parameter R10 = 32'H43a3d5c3; //3276.7*1/10=327.67, mm -> dac for 10mm/V;
-
-//(2^16-1)/5= 13107 dac/V, 16 bit DAC value for 0-5 V output range.
-parameter R1  = 32'H464ccc00;  //13107 in floating point, mm -> dac for 1 mm/V
-parameter R10 = 32'H44a3d666; //1310.7 in floating point, mm -> dac for 10mm/V;
-
 reg [SF_WIDTH-1:0] ch0_Amp, ch1_Amp/*synthesis keep*/;
-wire [SF_WIDTH-1:0] kdac = is10mmpV? R10 : R1;
 wire [SF_WIDTH-1:0] fp_X_OFFSET, fpCH0_OFFSET, fpCH1_OFFSET, Kxy,delta, sigma;
 wire [SF_WIDTH-1:0] A,B,C,D,fpOFFSETmm,fp_pos_dac,fp_pos_mm/*synthesis keep*/;
 wire sigma_zero;
@@ -76,12 +65,9 @@ wire [SF_WIDTH-1:0] sigma_div = sigma_zero? fp1 : sigma;
 
 wire [SF_WIDTH-1:0] A_gained, B_gained;
 
-//wire [SF_WIDTH-1:0] A_over_B; // = A/B
 reg [SF_WIDTH-1:0] A_scale, B_scale; // calibration values for each channel
 
 reg [SF_WIDTH-1:0] X_cal;
- 
-//altfp_div3232 div_inst1 (.dataa(ch0_Amp), . datab(ch1_Amp), .clock(clk), .result(A_over_B));   // ratio = A/B
 
 always @ (posedge clk) 
 	begin
@@ -107,8 +93,7 @@ always @ (posedge clk)
 				A_scale <= FP_CH0_NF;
 				B_scale <= FP_CH1_NF;
 			end
-		end
-		
+		end	
 	end
 
 Maxmin maxmin_inst(
@@ -129,9 +114,7 @@ Maxmin maxmin_inst(
 //altfp_16int2fp int2fpconv_inst1 (.dataa(avg_A), .clock(clk), .result(A)); // to floating point
 //altfp_16int2fp int2fpconv_inst2 (.dataa(avg_B), .clock(clk), .result(B)); // to floating point
 
-
 altfp_16int2fp int2fpconv_inst3 (.dataa(OFFSET), .clock(clk), .result(fp_X_OFFSET)); // to floating point
-
 
 altfp_16int2fp int2fpconv_inst4 (.dataa(CH0_ADC_OFFSET), .clock(clk), .result(fpCH0_OFFSET)); // to floating point
 altfp_16int2fp int2fpconv_inst5 (.dataa(CH1_ADC_OFFSET), .clock(clk), .result(fpCH1_OFFSET)); // to floating point
@@ -141,12 +124,12 @@ altfp_mul mul_inst2 (.dataa(ch0_Amp), .datab(A_scale), .clock(clk), .result(A_ga
 altfp_mul mul_inst3 (.dataa(ch1_Amp), .datab(B_scale), .clock(clk), .result(B_gained) ); //  
 
 // offset. 7clks
-altfp_add add_inst1 (.dataa(A_gained), .datab(fpCH0_OFFSET), .clock(clk), .result(A_comp));// offset. 7 clks
-altfp_add add_inst2 (.dataa(B_gained), .datab(fpCH1_OFFSET), .clock(clk), .result(B_comp));// offset 7 clks
+altfp_add add_inst1 (.dataa(A_gained), .datab(fpCH0_OFFSET), .clock(clk), .result(A_comp)); // offset. 7 clks
+altfp_add add_inst2 (.dataa(B_gained), .datab(fpCH1_OFFSET), .clock(clk), .result(B_comp)); // offset 7 clks
 
 // delata sigma, 7 clks
 altfp_sub sub_inst1 (.dataa(A_comp), .datab(B_comp), .clock(clk), .result(delta) ); // Delta. 7 clks
-altfp_add add_inst3 (.dataa(A_comp), .datab(B_comp), .clock(clk), .result(sigma), .zero(sigma_zero) );// Sigma. 7 clks
+altfp_add add_inst3 (.dataa(A_comp), .datab(B_comp), .clock(clk), .result(sigma), .zero(sigma_zero) ); // Sigma. 7 clks
 
 // division, 14 clks
 altfp_div3232 div_inst2 (.dataa(delta), . datab(sigma_div), .clock(clk), .result(C));   //C = (A-B)/(A+B). 14 clks
@@ -160,19 +143,12 @@ altfp_mul mul_inst5 (.dataa(Kxy), .datab(C), .clock(clk), .result(D) ); //D is p
 altfp_mul mul_inst6 (.dataa(fp_X_OFFSET), .datab(fpdot001), .clock(clk), .result(fpOFFSETmm) );  //um to mm
 altfp_add add_inst4(.dataa(D), .datab(fpOFFSETmm), .clock(clk), .result(fp_pos_mm) );// fp position in mm
 
-//16 bit DAC value, +/-10V, 1mm/V, or 10mm/V
-//altfp_mul mul_inst7 (.dataa(fp_pos_mm), .datab(kdac), .clock(clk), .result(fp_pos_dac) );  
-//altfp_fp2int fp2int_inst3(.dataa(fp_pos_dac), .clock(clk), .result(position));
-
 // Tc = tao*T = [-1/ln(K2)] * T
 // tao = 1/(2Pi*Fc), Fc: 3dB BW of the LPF
 
 // for T = 400 ns,i.e. data rate: 2.5 MHz, decimated signal:
 
-// K2 = 0.9, Tc = [-1/ln(0.951)] * 400ns = 7.961 us; Fc = 20 KHz
-// K2 = 0.99, Tc = [-1/ln(0.995)] * 400ns = 40 us; Fc= 3.9 KHz
-// K2 = 0.999, Tc = [-1/ln(0.999)] * 400ns = 400 us; 0.4 KHz
-// K2 = 0.9995, Tc = [-1/ln(0.999)] * 400ns = 800 us; 0.2 KHz
+
 
 // LPF. 22 clks
 LPF_IIR LPF_output_inst0( 

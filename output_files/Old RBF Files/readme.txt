@@ -1,3 +1,7 @@
+
+soc_system_jan25.rbf (Jan 23)
+	Last working compile
+
 soc_system_fpga_cal.rbf (Jan 23)
 	added 46.1 Mhz clk on FPGA output for autocal
 

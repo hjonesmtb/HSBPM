@@ -15,7 +15,7 @@
 
 //parameter FPGA_VERSION_NO = 32'd20221018; //nn_yyyy_mm_dd: AETE nn=00;
 //parameter FPGA_VERSION_NO = 32'd0047; //verification
-parameter FPGA_VERSION_NO = 32'd20240123; // Modified on jan 23, 2024
+parameter FPGA_VERSION_NO = 32'd20240223; // Modified on Feb 23, 2024
 
 module DE10_NANO_SoC_GHRD(
 
@@ -407,7 +407,7 @@ wire rd_eeprom,wr_eeprom /*synthesis keep*/;
                      );
 							
 
-							//================ Defining CPU to FPGA interface ===============
+//							================ Defining CPU to FPGA interface ===============
 //Avalon Memory Mapped Slave Bus declariation	
 
 wire avalon_read, avalon_write,avalon_cs/*synthesis keep*/;
@@ -794,7 +794,7 @@ always @ (posedge DCLK) begin
 	
 end
 
-wire [DATA_WIDTH-1:0] Ch0_Din_FIR, Ch1_Din_FIR;
+wire [DATA_WIDTH-1:0] Ch0_Din_FIR, Ch1_Din_FIR, Ch2_Din_FIR, Ch3_Din_FIR;
 wire [DATA_WIDTH-1:0] Ch0_Din/*synthesis keep*/;
 wire [DATA_WIDTH-1:0] Ch1_Din/*synthesis keep*/; 
 wire [DATA_WIDTH-1:0] Ch2_Din/*synthesis keep*/; 
@@ -944,7 +944,6 @@ calculate_position cal_position_X(
 	.FP_CH0_NF(`FP_CH0_NF), //gain compensation, around 1.0
 	.FP_CH1_NF(`FP_CH1_NF), //
 	.FP_KXY(`FP_KXY), // 32 bit fp, BPM sensitivity, i.g. 0.42 dB/mm for ISAC BPM
-	.is10mmpV(is10mmpV), //10mm/V or 1mm/V DAC
 	.AVG_select(AVG_select), //Not in use, March 8,2023
 	.clk(DCLK),  
 	.rst(maxmin_rst),
@@ -973,7 +972,6 @@ calculate_position cal_position_Y(
 	.FP_CH0_NF(`FP_CH2_NF), //gain compensation, around 1.0
 	.FP_CH1_NF(`FP_CH3_NF), //
 	.FP_KXY(`FP_KXY), // 32 bit fp, BPM sensitivity, i.g. 0.42 dB/mm for ISAC BPM
-	.is10mmpV(is10mmpV), //10mm/V or 1mm/V DAC
 	.AVG_select(AVG_select), //Not in use, March 8,2023
 	.clk(DCLK),  
 	.rst(maxmin_rst),

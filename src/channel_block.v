@@ -57,11 +57,8 @@ wire of1, nan1;
 wire of2, nan2;
 wire of3, nan3;
 
-//use 18 bit to prevent saturation of amp_sum signal:
-//wire [DATA_WIDTH+1:0] Amp_sum  = ch0 + ch1 + ch2 + ch3 ;
-//assign Amp_avg = Amp_sum[DATA_WIDTH+1:2]; //divided by 4
-wire [DATA_WIDTH:0] Amp_sum  = ch0 + ch1; 
-assign Amp_avg = Amp_sum[DATA_WIDTH:1]; //divided by 2
+wire [DATA_WIDTH+1:0] Amp_sum  = ch0 + ch1 + ch2 + ch3; // 4 x 16bits = 18bits
+assign Amp_avg = Amp_sum[DATA_WIDTH+1:2]; //divided by 4
 
 altfp_fp2int conv_inst0(.dataa(fp_ch0_Amp),.clock(DCLK),.result(ch0), .overflow(of0), .nan(nan0));
 altfp_fp2int conv_inst1(.dataa(fp_ch1_Amp),.clock(DCLK),.result(ch1), .overflow(of1), .nan(nan1));
