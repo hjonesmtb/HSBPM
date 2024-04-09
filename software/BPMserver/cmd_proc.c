@@ -154,12 +154,16 @@ int cmd_proc(char *cmdString_in , int *value_back, char **string_back, int **arr
 		if ( strcmp(cmd,"FP_CH3_NF")== 0 ) {writeReg(VR_BASE+FP_CH3_NF,invalue);return 0;}
 		if ( strcmp(cmd,"FP_CH3_NF?")== 0 ) {*value_back = readReg(VR_BASE+FP_CH3_NF);return 1;}
 
-		if ( strcmp(cmd,"CH0_OFFSET")== 0 ) {writeReg(VR_BASE+CH0_ADC_OFFSET,invalue);return 0;}
-		if ( strcmp(cmd,"CH0_OFFSET?")== 0 ) {*value_back = readReg(VR_BASE+CH0_ADC_OFFSET);return 1;}
-			
-		if ( strcmp(cmd,"CH1_OFFSET")== 0 ) {writeReg(VR_BASE+CH1_ADC_OFFSET,invalue);return 0;}
-		if ( strcmp(cmd,"CH1_OFFSET?")== 0 ) {*value_back = readReg(VR_BASE+CH1_ADC_OFFSET);return 1;}
-
+//		if ( strcmp(cmd,"CH0_OFFSET")== 0 ) {writeReg(VR_BASE+CH0_ADC_OFFSET,invalue);return 0;}
+//		if ( strcmp(cmd,"CH0_OFFSET?")== 0 ) {*value_back = readReg(VR_BASE+CH0_ADC_OFFSET);return 1;}
+//			
+//		if ( strcmp(cmd,"CH1_OFFSET")== 0 ) {writeReg(VR_BASE+CH1_ADC_OFFSET,invalue);return 0;}
+//		if ( strcmp(cmd,"CH1_OFFSET?")== 0 ) {*value_back = readReg(VR_BASE+CH1_ADC_OFFSET);return 1;}
+		
+		// Apr 9 2024
+		if ( strcmp(cmd,"COMB_ALPHA")== 0 ) {writeReg(VR_BASE+COMB_ALPHA_OFFSET,invalue);return 0;}
+		if ( strcmp(cmd,"COMB_ALPHA?")== 0 ) {*value_back = readReg(VR_BASE+COMB_ALPHA_OFFSET);return 1;}
+		
     	printf("\n\r Error: Bad command %s \n\r", cmd);
 		
 		}

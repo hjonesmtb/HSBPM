@@ -8,11 +8,13 @@
 // 2. this gate needs to be cut in both side for transition
 // 3. the transition should be very small, for now I used 4 clk = 1.6 us 
 
+// Modified Apr 05 2024 to use a variable transition. The 16 clk fixed value is cutting off short pulses - HJ
+ 
 `timescale 1ns / 1ps
 module alignment( 
 	input [FULL_WIDTH-1:0] signal, //postive always
 	input gate, 
-	input [DATA_WIDTH-1:0] transition, //number of clk , not in use 
+	input [DATA_WIDTH-1:0] transition, //number of clk
 	input clk, //clock is ADC_clk/8 = 2.5 MHz 
 	input reset,	
 	output reg [FULL_WIDTH-1:0] signal_delayed,
@@ -26,14 +28,29 @@ module alignment(
              state_transition = 1, 
 				 state_gate = 2;
 				 
-parameter TRANSITION	= 4;
-parameter DELAY = 4*TRANSITION;	//new gate needs to be delayed by 4 times of TRANSITION
-			
-reg [1:0] state;
+//
+//	parameter MAX_TRANSITION = 63;
+//	reg [FULL_WIDTH-1:0] sig [MAX_TRANSITION:0]; // previous 64 signals
+//	wire [5:0] trans = (transition >= MAX_TRANSITION)? MAX_TRANSITION: transition; // limit transition to 64 clks
+//
+//	integer i;
+//	always @ (posedge clk)
+//    begin 
+//		sig[0] <= signal;
+//      for (i = 1; i<=trans; i=i+1) begin
+//			sig[i] <= sig[i-1];
+//		end
+//		signal_delayed <= sig[trans];
+//	 end	
+	 
+
+parameter DELAY = 10;	//new gate needs to be delayed by 4 times of TRANSITION
+
+reg [1:0] state;		
 reg [FULL_WIDTH-1:0] sig_1,sig_2,sig_3,sig_4,sig_5,sig_6,sig_7;
 reg [FULL_WIDTH-1:0] sig_8,sig_9,sig_10,sig_11,sig_12,sig_13,sig_14;
-reg [7:0] cnt; 
-
+reg [7:0] cnt;
+	
 always @ (posedge clk)
     begin 
       sig_1 <= signal;
@@ -50,7 +67,7 @@ always @ (posedge clk)
 		sig_12 <= sig_11;
 		sig_13 <= sig_12;
 		sig_14 <= sig_13;
-		signal_delayed <= sig_14;		
+		signal_delayed <= sig_8;	// changed to delay of 9 vs 15
 	 end	
  
 

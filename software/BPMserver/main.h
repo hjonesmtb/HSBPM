@@ -58,9 +58,6 @@
 //#define CH1_DAC_PEAK_OFFSET_ADDR 4*49
 //#define CH1_DAC_AVG_OFFSET_ADDR 4*50
 
-#define CH0_ADC_OFFSET_ADDR 4*49 // HJ (Nov 27, 2023)
-#define CH1_ADC_OFFSET_ADDR 4*50
-
 #define CH2_DAC_PEAK_OFFSET_ADDR 4*51
 #define CH2_DAC_AVG_OFFSET_ADDR 4*52
 
@@ -70,6 +67,7 @@
 #define MODULE_ID0_ADDR 4*71
 #define MODULE_ID1_ADDR 4*72	
 
+#define COMB_ALPHA_ADDR 4*73
 
 
 
@@ -111,8 +109,10 @@
 #define MODULE_ID0  (( (unsigned long) ALT_LWFPGASLVS_OFST + MYAVALONBUS32_0_BASE + MODULE_ID0_ADDR ) & (unsigned long) (HW_REGS_MASK))
 #define MODULE_ID1  (( (unsigned long) ALT_LWFPGASLVS_OFST + MYAVALONBUS32_0_BASE + MODULE_ID1_ADDR ) & (unsigned long) (HW_REGS_MASK))
 
-#define CH0_ADC_OFFSET  (( (unsigned long) ALT_LWFPGASLVS_OFST + MYAVALONBUS32_0_BASE + CH0_ADC_OFFSET_ADDR ) & (unsigned long) (HW_REGS_MASK)) // HJ (Nov 27, 2023)
-#define CH1_ADC_OFFSET  (( (unsigned long) ALT_LWFPGASLVS_OFST + MYAVALONBUS32_0_BASE + CH1_ADC_OFFSET_ADDR ) & (unsigned long) (HW_REGS_MASK)) // HJ (Nov 27, 2023)
+//#define CH0_ADC_OFFSET  (( (unsigned long) ALT_LWFPGASLVS_OFST + MYAVALONBUS32_0_BASE + CH0_ADC_OFFSET_ADDR ) & (unsigned long) (HW_REGS_MASK)) // HJ (Nov 27, 2023)
+//#define CH1_ADC_OFFSET  (( (unsigned long) ALT_LWFPGASLVS_OFST + MYAVALONBUS32_0_BASE + CH1_ADC_OFFSET_ADDR ) & (unsigned long) (HW_REGS_MASK)) // HJ (Nov 27, 2023)
+
+#define COMB_ALPHA_OFFSET  (( (unsigned long) ALT_LWFPGASLVS_OFST + MYAVALONBUS32_0_BASE + COMB_ALPHA_ADDR ) & (unsigned long) (HW_REGS_MASK)) // Apr 9 2024
 
 extern sem_t       buffer_1_sem;
 extern uint8_t*    buffer_1;

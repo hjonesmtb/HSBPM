@@ -1,5 +1,5 @@
 #
-TARGET = BPMserver
+TARGET = BPMServer
 
 SOPC_FILE = ../../soc_system.sopcinfo #Path to SOPC File
 HPS_MODULE = hps_0 #Name of HPS module in soc system

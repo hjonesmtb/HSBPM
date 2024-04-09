@@ -6,6 +6,8 @@
 //Feb.27,2021: trig_hold_max > 1ms, will allow a DC beam to be triggered every this time interval.
 //March 9,2023: change clk to 20 Mhz, 50 ns for HSBPM project.
 
+// Apr 05 2024, changed transition to transition-2 for a hopefully better alignment - HJ.
+
 `timescale 1ns / 1ps
 module self_trigger(
 	input [DATA_WIDTH-1:0] signal, //postive always

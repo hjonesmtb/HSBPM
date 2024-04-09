@@ -8,15 +8,17 @@
 // last modified: March 5,2021, SL
 // changed fixed point coeff. to floating point: K1,K2
 // I think the reason that Bill R's using the fixed point is it's easier to convert from real number.
+// March 12 2024, HJ
+// added reset to filter to stop glitches
 
 // total latency ~22 clks
 module LPF_IIR(
     input FCLK,
     input in_valid,   
 
-	input [31:0] data_in,
+	 input [31:0] data_in,
 	
-	input [31:0] K2, //
+	 input [31:0] K2, //
 	 
     output  [31:0] data_out
 
@@ -60,7 +62,7 @@ reg [SF_WIDTH-1:0] Y1/*synthesis keep*/;
 wire NaN;
 
 assign X = data_in;
-assign data_out = Y;
+assign data_out = in_valid? Y : data_in; // disable filter if needed
 
 // 7 clks
 altfp_sub sub_inst1 (.dataa(fp1), .datab(K2), .clock(FCLK), .result(K1) ); // K1 = 1 - K2
@@ -72,11 +74,11 @@ altfp_mul mul_inst2 (.dataa(Y1), .datab(K2), .clock(FCLK), .result(Y1K) );
 // 7 clks
 altfp_add add_inst1 (.dataa(XK), .datab(Y1K), .clock(FCLK), .result(Y), .nan(NaN) ); 
 
-always @(posedge FCLK)  
-  if (in_valid) 
-     begin 
-        if (NaN) Y1 <= 32'b0;
-	     else Y1 <= Y;
-     end
-	  
+always @(posedge FCLK) begin
+	if (in_valid) begin 
+		if (NaN) Y1 <= 32'b0;
+		else Y1 <= Y;
+	end
+end
+	
 endmodule

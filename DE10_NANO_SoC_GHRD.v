@@ -14,7 +14,7 @@
 //-----------------------------
 
 //parameter FPGA_VERSION_NO = 32'd0047; //verification
-parameter FPGA_VERSION_NO = 32'd20240221; // Modified on Feb 21, 2024
+parameter FPGA_VERSION_NO = 32'd20240405; // Modified on April 05, 2024
 
 module DE10_NANO_SoC_GHRD(
 
@@ -189,33 +189,33 @@ module DE10_NANO_SoC_GHRD(
 
 `include "src/param.v"
 
-`define 	FP_CH1_NF {configuration[3],configuration[2],configuration[1],configuration[0]}
-`define 	FP_CH2_NF {configuration[7],configuration[6],configuration[5],configuration[4]}
-`define 	FP_CH3_NF {configuration[11],configuration[10],configuration[9],configuration[8]}
+`define 	CH2_LOW_GAIN {configuration[3],configuration[2],configuration[1],configuration[0]}
+`define 	CH2_MED_GAIN {configuration[7],configuration[6],configuration[5],configuration[4]}
+`define 	CH2_HIGH_GAIN {configuration[11],configuration[10],configuration[9],configuration[8]}
 `define 	FP_CH4_NF {configuration[15],configuration[14],configuration[13],configuration[12]}
 
 `define 	TRANSITION {configuration[17],configuration[16]}
 
 `define 	CON_REG_L configuration[18]
-`define 	CON_REG_H configuration[19]
+`define 	CON_REG_H configuration[19] 
 
-`define 	TRIG_TH  {configuration[21],configuration[20]}
+`define 	TRIG_TH  {configuration[21],configuration[20]} // trigger threshold
 
-`define 	FP_KXY {configuration[25],configuration[24],configuration[23],configuration[22]}
-`define 	X_OFFSET {configuration[27],configuration[26]}
-`define 	Y_OFFSET {configuration[29],configuration[28]}
+`define 	FP_KXY {configuration[25],configuration[24],configuration[23],configuration[22]} // Sensitivity in dB/mm
+`define 	X_OFFSET {configuration[27],configuration[26]} // position offset for calibration
+`define 	Y_OFFSET {configuration[29],configuration[28]} // position offset for calibration
 
-`define 	MODULE_ID1  {configuration[33],configuration[32],configuration[31],configuration[30]}
-`define 	MODULE_ID2  {configuration[37],configuration[36],configuration[35],configuration[34]}
-`define 	MODULE_ID3  {configuration[41],configuration[40],configuration[39],configuration[38]}
-`define 	MODULE_ID4  {configuration[45],configuration[44],configuration[43],configuration[42]}
 
-`define 	IIR_OUT_K2 {configuration[49],configuration[48],configuration[47],configuration[46]}
-`define 	CAL_DC   configuration[50]
-`define 	CAL_AMP  configuration[51]
+`define 	MODULE_ID1  {configuration[33],configuration[32],configuration[31],configuration[30]} // Upper byte of ID
+`define 	MODULE_ID2  {configuration[37],configuration[36],configuration[35],configuration[34]} // Lower byte of ID
+`define 	MODULE_ID3  {configuration[41],configuration[40],configuration[39],configuration[38]} // not used
+`define 	MODULE_ID4  {configuration[45],configuration[44],configuration[43],configuration[42]} // not used
 
-`define 	CH1_ADC_OFFSET  {configuration[53],configuration[52]}
-`define 	CH2_ADC_OFFSET  {configuration[55],configuration[54]}
+`define 	IIR_OUT_K2 {configuration[49],configuration[48],configuration[47],configuration[46]} // Time constant for output LPF
+`define 	CAL_DC   configuration[50] // duty cycle of test pulse
+`define 	CAL_AMP  configuration[51] // not used
+
+`define 	COMB_ALPHA {configuration[55],configuration[54],configuration[53],configuration[52]} // alpha for comb filter (0 < alpha < 1)
 
 //=======================================================
 //  REG/WIRE declarations
@@ -244,10 +244,10 @@ wire ST_EN; // 1126 Hz duty cycle for calibration source
 
 assign GPIO_1_3 = ATTEN_A1; // enable/disable -20 dB attenuation of calibration signal
 assign GPIO_1_1 = ATTEN_A0; // enable/disable -10 dB attenuation of calibration signal
-assign GPIO_1_2 = clk_10Hz; // enable/disable calibration 
+assign GPIO_1_2 = Ena_ST? 1'b1 : ST_on; // enable/disable calibration 
 assign GPIO_1_5 = GAIN_EN;  // enable/disable VGA gain
 assign GPIO_1_4 = ATTEN_EN; // enable/disable VGA attenuation
-assign GPIO_1_7 = ST_EN;    // Modulate calibration signal
+assign GPIO_1_7 = (Ena_ST | cal_sel)? ST_EN : 1'b0;    // Modulate calibration signal if autocalibrating or self-testing.
 
 wire ext_trigger = GPIO_1_0;	 
 
@@ -415,7 +415,199 @@ wire rd_eeprom,wr_eeprom /*synthesis keep*/;
           .SDA(GPIO_0_33),
           .SCL(GPIO_0_31)               
                      );
-							
+	
+
+reg [SF_WIDTH-1:0] GAIN_SETTING_X;
+reg [SF_WIDTH-1:0] GAIN_SETTING_Y;
+
+reg GAIN_EN_AUTO, ATTEN_EN_AUTO;
+reg [DATA_WIDTH-1:0] Amp_latched; // latched value of Amp_avg
+
+reg [2:0] gain_state;
+
+// these states are for automatic gain control
+parameter LOW_GAIN_STATE = 0;
+parameter MED_GAIN_STATE = 1;
+parameter HIGH_GAIN_STATE = 2;
+// this state is for manual gain control
+parameter MANUAL_GAIN = 3; 
+
+always @(posedge new_gate)
+begin
+	if(SYS_RST)
+		begin
+			gain_state <= MANUAL_GAIN;
+//			// default to HIGH range
+//			GAIN_SETTING_X <= `CH2_HIGH_GAIN;
+//			GAIN_EN_AUTO <= 1;
+//			ATTEN_EN_AUTO <= 0;
+		end
+	else
+		begin
+	
+			GAIN_SETTING_Y <= `FP_CH4_NF;
+	
+			case(gain_state)
+				LOW_GAIN_STATE:
+				begin
+					
+					if(!ena_gainctrl) begin
+						gain_state <= MANUAL_GAIN;
+					end
+					
+					else if(Amp_avg < 16'd2000) begin
+						gain_state <= MED_GAIN_STATE;
+						
+						GAIN_SETTING_X <= `CH2_MED_GAIN;
+						GAIN_EN_AUTO <= 1'b0;
+						ATTEN_EN_AUTO <= 1'b0;	
+					end
+					else begin
+						GAIN_SETTING_X <= `CH2_LOW_GAIN;
+						GAIN_EN_AUTO <= 1'b0;
+						ATTEN_EN_AUTO <= 1'b1;
+					end
+				end
+				
+				MED_GAIN_STATE: 
+				begin
+					
+					if(!ena_gainctrl) begin
+						gain_state <= MANUAL_GAIN;
+					end
+					
+					else if(Amp_avg > 16'd30000) begin
+						gain_state <= LOW_GAIN_STATE;
+						
+						GAIN_SETTING_X <= `CH2_LOW_GAIN;
+						GAIN_EN_AUTO <= 1'b0;
+						ATTEN_EN_AUTO <= 1'b1;
+					end
+					else if(Amp_avg < 16'd5000) begin 
+						gain_state <= HIGH_GAIN_STATE;
+						
+						GAIN_SETTING_X <= `CH2_HIGH_GAIN;
+						GAIN_EN_AUTO <= 1'b1;
+						ATTEN_EN_AUTO <= 1'b0;
+					end
+					else begin
+						GAIN_SETTING_X <= `CH2_MED_GAIN;
+						GAIN_EN_AUTO <= 1'b0;
+						ATTEN_EN_AUTO <= 1'b0;	
+					end
+				end
+									
+				HIGH_GAIN_STATE:
+				begin
+					
+					if(!ena_gainctrl) begin
+						gain_state <= MANUAL_GAIN;
+					end
+					
+					else if(Amp_avg > 16'd30000) begin
+						gain_state <= MED_GAIN_STATE;
+						
+						GAIN_SETTING_X <= `CH2_MED_GAIN;
+						GAIN_EN_AUTO <= 1'b0;
+						ATTEN_EN_AUTO <= 1'b0;	
+					end
+					
+					else begin
+						GAIN_SETTING_X <= `CH2_HIGH_GAIN;
+						GAIN_EN_AUTO <= 1'b1;
+						ATTEN_EN_AUTO <= 1'b0;
+					end
+				end
+				// manually choose gain range using CON_REG_L[0:1] 
+				// for this state, GAIN_EN and ATTEN_EN are driven wires
+				MANUAL_GAIN: 
+				begin	
+					if (ena_gainctrl) begin
+						gain_state <= HIGH_GAIN_STATE;
+						
+						GAIN_SETTING_X <= `CH2_HIGH_GAIN;
+						GAIN_EN_AUTO <= 1'b1;
+						ATTEN_EN_AUTO <= 1'b0;
+					end
+					
+					else begin
+						if(GAIN_EN && ~ATTEN_EN) begin
+							GAIN_SETTING_X <= `CH2_HIGH_GAIN;
+						end
+						else if(~GAIN_EN && ATTEN_EN) begin
+							GAIN_SETTING_X <= `CH2_LOW_GAIN;
+						end
+						else begin
+							GAIN_SETTING_X <= `CH2_MED_GAIN;
+						end
+					end
+				end
+				
+				default:
+					begin 
+						gain_state <= MANUAL_GAIN;
+					end
+					
+			endcase
+		end
+
+end
+
+//always@(posedge SCLK) begin
+//	
+//	/*
+//	HIGH GAIN RANGE: 0 - 30,000 
+//	MED GAIN RANGE : 5,000 - 25,000 
+//	LOW GAIN RANGE : 4,000+ 
+//	*/
+//	
+//	Amp_latched <= Amp_avg;
+//
+//	GAIN_SETTING_Y <= `FP_CH4_NF;
+//	
+//	if(ena_gainctrl) begin
+//		// HIGH range
+//		if((GAIN_EN_AUTO & ~ATTEN_EN_AUTO) && (Amp_latched > 16'd30000)) begin
+//			GAIN_SETTING_X <= `CH2_MED_GAIN;
+//			GAIN_EN_AUTO <= 1'b0;
+//			ATTEN_EN_AUTO <= 1'b0;
+//			
+//		end
+//		// MED range
+//		else if(~GAIN_EN_AUTO & ~ATTEN_EN_AUTO) begin
+//			if(Amp_latched > 16'd40000) begin
+//				GAIN_SETTING_X <= `CH2_LOW_GAIN;
+//				GAIN_EN_AUTO <= 1'b0;
+//				ATTEN_EN_AUTO <= 1'b1;
+//			end
+//			else if(Amp_latched < 16'd5000) begin // 3500 bits (~5 dBm) hysteresis from MED-HIGH transition
+//				GAIN_SETTING_X <= `CH2_HIGH_GAIN;
+//				GAIN_EN_AUTO <= 1'b1;
+//				ATTEN_EN_AUTO <= 1'b0;
+//			end
+//		end
+//		// LOW range
+//		else if((~GAIN_EN_AUTO & ATTEN_EN_AUTO) && (Amp_latched < 16'd2500)) begin // ~1500 bits hysteresis from MED-LOW transition
+//			GAIN_SETTING_X <= `CH2_MED_GAIN;
+//			GAIN_EN_AUTO <= 1'b0;
+//			ATTEN_EN_AUTO <= 1'b0;
+//		end
+//	end
+//	
+//	else begin
+//		if(GAIN_EN && ~ATTEN_EN) begin
+//			GAIN_SETTING_X <= `CH2_HIGH_GAIN;
+//		end
+//		
+//		else if(~GAIN_EN && ATTEN_EN) begin
+//			GAIN_SETTING_X <= `CH2_LOW_GAIN;
+//		end
+//		else begin
+//			GAIN_SETTING_X <= `CH2_MED_GAIN;
+//		end
+//	end
+//end
+
 
 //							================ Defining CPU to FPGA interface ===============
 
@@ -444,9 +636,9 @@ parameter integer 	FIFO_ADDR = 11;
 parameter integer 	EEPROM_RD_ADDR = 15;
 parameter integer 	EEPROM_WR_ADDR = 16;
 
-parameter integer 	FP_CH1_NF_ADDR = 17;
-parameter integer 	FP_CH2_NF_ADDR = 18;
-parameter integer 	FP_CH3_NF_ADDR = 19;
+parameter integer 	CH2_LOW_GAIN_ADDR = 17;
+parameter integer 	CH2_MED_GAIN_ADDR = 18;
+parameter integer 	CH2_HIGH_GAIN_ADDR = 19;
 parameter integer 	FP_CH4_NF_ADDR = 20;
 
 parameter integer 	FP_KXY_ADDR = 21;
@@ -461,14 +653,13 @@ parameter integer 	CAL_WAVE_ADDR = 33;
 parameter integer 	IIR_OUT_K1_ADDR = 47;
 parameter integer 	IIR_OUT_K2_ADDR = 48;
 
-parameter integer 	CH1_ADC_OFFSET_ADDR = 49; // HJ changed name from CH1_DAC_PEAK_OFFSET_ADDR
-parameter integer 	CH2_ADC_OFFSET_ADDR = 50; // CH1_DAC_AVG_OFFSET_ADDR
-
 parameter integer 	CH2_DAC_PEAK_OFFSET_ADDR = 51;
 parameter integer 	CH2_DAC_AVG_OFFSET_ADDR = 52;
 	
 parameter integer MODULE_ID1_ADDR = 71;
-parameter integer MODULE_ID2_ADDR = 72;	
+parameter integer MODULE_ID2_ADDR = 72;
+
+parameter integer COMB_ALPHA_ADDR = 73;	
 
 //===========================  Avalon Bus interface 	============================ 
 soc_system u0(
@@ -576,20 +767,22 @@ soc_system u0(
 //							================ Configuration Register ===============
 wire [15:0] status_reg = {channel_error[7:0],pll_locked,No_beam};
 
-assign GAIN_EN = `CON_REG_L[0];// CHANGE IN LABVIEW
-assign ATTEN_EN = `CON_REG_L[1];// CHANGE IN LABVIEW
+assign GAIN_EN = ena_gainctrl? GAIN_EN_AUTO :`CON_REG_L[0];// CHANGE IN LABVIEW
+assign ATTEN_EN = ena_gainctrl? ATTEN_EN_AUTO :`CON_REG_L[1];// CHANGE IN LABVIEW
 wire ch_select = `CON_REG_L[2];
 assign ADC_clksel =  `CON_REG_L[3]; //select external clk or internal 20 Mhz clk
 wire waveform_select = `CON_REG_L[4]; // select 
-//`CON_REG[5]: not used for now.
+wire LPF_en = `CON_REG_L[5]; // enable output IIR 
 wire Ena_ST = `CON_REG_L[6];
 wire auto_trig_sel = `CON_REG_L[7];
 
 wire ena_avg = `CON_REG_H[1]; //enable input FIR
-// `CON_REG_H[2]: not used
+wire ena_gainctrl = `CON_REG_H[2]; // automatic gain control
 assign ATTEN_A0 = `CON_REG_H[3]; // autocalibration signal amplitude
 assign ATTEN_A1 = `CON_REG_H[4]; // autocalibration signal amplitude
 wire cal_sel = `CON_REG_H[5]; // choose calibration. 1 for autocal, 0 for manual
+wire ena_comb = `CON_REG_H[6]; // enable comb filter
+wire decimate = `CON_REG_H[7]; // enable comb filter
 
 wire auto_trig; 
 wire DAC_update = trig; //changed from auto_trig. HJ Nov 29, 2023
@@ -686,42 +879,29 @@ always@(posedge SYS_CLK)
 	if ((avalon_addr == CAL_WAVE_ADDR) & (avalon_read_o == 1) ) 
 			dout <= {16'b0,`CAL_AMP,`CAL_DC}; 	
 			
-	/*   Write/Read to FP_CH1_NF  */
-	if ((avalon_addr == FP_CH1_NF_ADDR) & (avalon_write_o == 1) ) 
-			`FP_CH1_NF <= avalon_writedata; 
-	if ((avalon_addr == FP_CH1_NF_ADDR) & (avalon_read_o == 1) ) 
-			dout <= `FP_CH1_NF;  
+	/*   Write/Read to CH2_LOW_GAIN  */
+	if ((avalon_addr == CH2_LOW_GAIN_ADDR) & (avalon_write_o == 1) ) 
+			`CH2_LOW_GAIN <= avalon_writedata; 
+	if ((avalon_addr == CH2_LOW_GAIN_ADDR) & (avalon_read_o == 1) ) 
+			dout <= `CH2_LOW_GAIN;  
 			
-	/*   Write/Read to FP_CH2_NF  */
-	if ((avalon_addr == FP_CH2_NF_ADDR) & (avalon_write_o == 1) ) 
-			`FP_CH2_NF <= avalon_writedata; 
-	if ((avalon_addr == FP_CH2_NF_ADDR) & (avalon_read_o == 1) ) 
-			dout <= `FP_CH2_NF;
+	/*   Write/Read to CH2_MED_GAIN  */
+	if ((avalon_addr == CH2_MED_GAIN_ADDR) & (avalon_write_o == 1) ) 
+			`CH2_MED_GAIN <= avalon_writedata; 
+	if ((avalon_addr == CH2_MED_GAIN_ADDR) & (avalon_read_o == 1) ) 
+			dout <= `CH2_MED_GAIN;
 			
-	/*   Write/Read to FP_CH3_NF  */
-	if ((avalon_addr == FP_CH3_NF_ADDR) & (avalon_write_o == 1) ) 
-			`FP_CH3_NF <= avalon_writedata; 
-	if ((avalon_addr == FP_CH3_NF_ADDR) & (avalon_read_o == 1) ) 
-			dout <= `FP_CH3_NF;
+	/*   Write/Read to CH2_HIGH_GAIN  */
+	if ((avalon_addr == CH2_HIGH_GAIN_ADDR) & (avalon_write_o == 1) ) 
+			`CH2_HIGH_GAIN <= avalon_writedata; 
+	if ((avalon_addr == CH2_HIGH_GAIN_ADDR) & (avalon_read_o == 1) ) 
+			dout <= `CH2_HIGH_GAIN;
 			
 	/*   Write/Read to FP_CH4_NF  */
 	if ((avalon_addr == FP_CH4_NF_ADDR) & (avalon_write_o == 1) ) 
 			`FP_CH4_NF <= avalon_writedata; 
 	if ((avalon_addr == FP_CH4_NF_ADDR) & (avalon_read_o == 1) ) 
-			dout <= `FP_CH4_NF;
-
-	/*   Write/Read to CH1_ADC_OFFSET (HJ)  */
-	if ((avalon_addr == CH1_ADC_OFFSET_ADDR) & (avalon_write_o == 1) ) 
-			`CH1_ADC_OFFSET <= avalon_writedata[15:0]; 
-	if ((avalon_addr == CH1_ADC_OFFSET_ADDR) & (avalon_read_o == 1) ) 
-			dout <= {16'b0,`CH1_ADC_OFFSET};  	
-	
-	/*   Write/Read to CH2_ADC_OFFSET  (HJ) */
-	if ((avalon_addr == CH2_ADC_OFFSET_ADDR) & (avalon_write_o == 1) ) 
-			`CH2_ADC_OFFSET <= avalon_writedata[15:0]; 
-	if ((avalon_addr == CH2_ADC_OFFSET_ADDR) & (avalon_read_o == 1) ) 
-			dout <= {16'b0,`CH2_ADC_OFFSET};  	
-			
+			dout <= `FP_CH4_NF;			
 			
 	/*   Write/Read to FP_KXY  */
 	if ((avalon_addr == FP_KXY_ADDR) & (avalon_write_o == 1) ) 
@@ -757,7 +937,13 @@ always@(posedge SYS_CLK)
 	if ((avalon_addr == MODULE_ID2_ADDR) & (avalon_write_o == 1) ) 
 			`MODULE_ID2 <= avalon_writedata; 
 	if ((avalon_addr == MODULE_ID2_ADDR) & (avalon_read_o == 1) ) 
-			dout <= `MODULE_ID2;  			
+			dout <= `MODULE_ID2;  	
+	
+	   			 /*   Write/Read to COMB_ALPHA  */
+	if ((avalon_addr == COMB_ALPHA_ADDR) & (avalon_write_o == 1) ) 
+			`COMB_ALPHA <= avalon_writedata; 
+	if ((avalon_addr == COMB_ALPHA_ADDR) & (avalon_read_o == 1) ) 
+			dout <= `COMB_ALPHA;  	
 			
 end //else
 
@@ -782,28 +968,41 @@ self_trigger self_trigger_inst(
 );
 
 // ================ Processing ==============
-reg clk_10Hz; // 10Hz pulse with 0.8% duty cycle (0.8ms width)
+reg clk_10Hz; // 1Hz pulse with 0.2% duty cycle (2ms width)
+parameter T_1s = 2500000; // # of clk cycles in 1 second
 reg [21:0] count_10Hz; // count to 2.5 million
 
 // generate 10Hz period pulse, and an extended version (ST_on) to account for calculate_position latency
+
+// Changed to a 1 Hz pulse on march 12
 always @ (posedge DCLK) begin
-	count_10Hz <= count_10Hz + 1;
 	
-	if(count_10Hz == 25'd248000) begin
-		clk_10Hz <= 1'b1;
-		ST_on <= 1'b1;
+	count_10Hz <= count_10Hz + 1;
+	if(count_10Hz == T_1s)begin
+		count_10Hz <= 25'b0;	
 	end
-	else if(count_10Hz == 25'd250000) begin
+	
+	if(cal_sel) begin
+		if(count_10Hz == T_1s - 5000) begin
+			clk_10Hz <= 1'b1;
+			ST_on <= 1'b1;
+		end
+		else if(count_10Hz == T_1s - 1000) begin
+			clk_10Hz <= 1'b0;
+		end
+		
+		else if(count_10Hz == T_1s)begin
+			ST_on <= 1'b0;
+		end		
+	end
+	
+	else begin
+		ST_on <= 1'b0;
 		clk_10Hz <= 1'b0;
 	end
-	
-	else if(count_10Hz == 25'd250100)begin
-		count_10Hz <= 25'b0;
-		ST_on <= 1'b0;
-	end	
 end
 
-wire [DATA_WIDTH-1:0] Ch1_Din_FIR, Ch2_Din_FIR;
+wire [DATA_WIDTH-1:0] Ch1_Din_FIR, Ch2_Din_FIR, Ch3_Din_FIR, Ch4_Din_FIR;
 wire [DATA_WIDTH-1:0] Ch1_Din/*synthesis keep*/;
 wire [DATA_WIDTH-1:0] Ch2_Din/*synthesis keep*/; 
 wire [DATA_WIDTH-1:0] Ch3_Din/*synthesis keep*/; 
@@ -862,8 +1061,24 @@ wire [SF_WIDTH-1:0] fp_ch2_Amp;
 wire [SF_WIDTH-1:0] fp_ch3_Amp;
 wire [SF_WIDTH-1:0] fp_ch4_Amp;
 
-
 // ----------------------- Convert raw data into demodulated signal ------------------------------
+
+reg in_valid; // 1.15 MHz for comb filter
+reg [9:0] in_valid_cnt;
+
+always@(posedge ex_CLK) begin
+	if(in_valid_cnt == 19) begin
+		in_valid_cnt <= 0;
+	end 	
+	else in_valid_cnt <= in_valid_cnt + 1;
+	
+	if((in_valid_cnt == 1) || (in_valid_cnt == 2)) begin
+		in_valid <= 1;
+	end
+	else begin
+		in_valid <= 0;
+	end
+end
 
 channel_block Ch_XY_inst(
  .clk(SCLK), //ADC clock
@@ -872,7 +1087,9 @@ channel_block Ch_XY_inst(
  
  .din(channel_din), //64 bit
  .trig(sfifo_trig), // modified DEC 18 2023. From trig
-
+ .in_valid(in_valid),
+ .ena_comb(ena_comb),
+ .alpha(`COMB_ALPHA),
  //from fast fifo
  .fast_fifo_full(fast_fifo_full),
  .fast_fifo_empty(fast_fifo_empty),
@@ -924,10 +1141,6 @@ wire [SF_WIDTH-1:0] X_fp_pos,Y_fp_pos/*synthesis keep*/; // slow FIFO values for
 wire [SF_WIDTH-1:0] X_fp_pos_uncal; // uncalibrated beam position (no autocal)
 wire [SF_WIDTH-1:0] max_A,max_B,min_A,min_B,max_C,max_D,min_C,min_D/*synthesis keep*/; 
 
-// CHANGE FOR V3 - remove these signals.
-wire [DATA_WIDTH-1:0] Xdac, Ydac/* synthesis keep */; //16 bit position signed, two's complement. Modified (removed sign) Nov 23,2023
-wire signed [DATA_WIDTH-1:0] X_Position, Y_Position; //16 bit position signed, two's complement.
-
 wire maxmin_rst; //for debug use, to clear the maxmin register
 //the fifo_clr_reg is one clk SYS_CLK, needs to be streched to one DCLK 
 pulse_shaper pulse_inst(
@@ -936,42 +1149,21 @@ pulse_shaper pulse_inst(
 	.data_out(maxmin_rst)
     );
 
-// beam position is updated after each trig plus 80 ADC clk.
-// if no beam, then no trig, and the "position" signal in the following module is not updated, but the DAC output has noise
-// which indicating the electronics is alive on Xtpage.
-
-// LPF TC = 0.434 ms, 9.5 ms,100 ms, 1000 ms, see "lpf_IIR.v" CHANGE FOR V3 - remove these parameters.
-parameter fpd1 = 32'H3dcccccd; //0.1 in fp
-parameter fpd9 = 32'H3f666666; //0.9 in fp
-parameter fpd99 = 32'H3f7d70a4; //0.99 in fp
-parameter fpd999 = 32'H3f7fbe77; //0.999 in fp
-
-// CHANGE FOR V3 - These seem unused?
-wire [DATA_WIDTH-1:0] delayed_ch0,delayed_ch1/*synthesis keep*/;
-altfp_fp2int conv_inst0(.dataa(signal_delayed_X[31:0]), .clock(DCLK),.result(delayed_ch0));
-altfp_fp2int conv_inst1(.dataa(signal_delayed_X[63:32]),.clock(DCLK),.result(delayed_ch1));
-
-wire [DATA_WIDTH-1:0] delayed_ch2,delayed_ch3/*synthesis keep*/;
-altfp_fp2int conv_inst2(.dataa(signal_delayed_Y[31:0]), .clock(DCLK),.result(delayed_ch2));
-altfp_fp2int conv_inst3(.dataa(signal_delayed_Y[63:32]),.clock(DCLK),.result(delayed_ch3));
-
 // CHANGE FOR V3 - remove unused inputs from this module.	 
 calculate_position cal_position_X(
 	.A_amp(signal_delayed_X[31:0]), //
 	.B_amp(signal_delayed_X[63:32]),//
 	.data_valid(), 
 	.OFFSET(`X_OFFSET),//offset adjust, um
-	.FP_CH0_NF(`FP_CH1_NF), //gain compensation, around 1.0
-	.FP_CH1_NF(`FP_CH2_NF), //
-	.FP_KXY(`FP_KXY), // 32 bit fp, BPM sensitivity, i.g. 0.42 dB/mm for ISAC BPM
-	.AVG_select(AVG_select), //Not in use, March 8,2023
-	.clk(DCLK),  
+	.FP_CH2_NF(GAIN_SETTING_X), //gain compensation, around 1.0
+	.FP_KXY(`FP_KXY), // 32 bit fp, BPM sensitivity, i.g. 0.20261 dB/mm for Ferrite BPM
+	.LPF_en(LPF_en), 
+	.clk_fast(DCLK),  
 	.rst(maxmin_rst),
 	.gate(new_gate), //only calculate position inside this signal
    .IIR_OUT_K2(`IIR_OUT_K2),	
-	.CH0_ADC_OFFSET(`CH1_ADC_OFFSET), // HJ Nov 27, 2023
-	.CH1_ADC_OFFSET(`CH2_ADC_OFFSET), // HJ Nov 27, 2023
 	.cal_sel(cal_sel),
+	.decimate(decimate),
 	.clk_10Hz(clk_10Hz),
 	.A_comp(peak_A),
 	.B_comp(peak_B),
@@ -989,17 +1181,15 @@ calculate_position cal_position_Y(
 	.B_amp(signal_delayed_Y[63:32]),//
 	.data_valid(), 
 	.OFFSET(`Y_OFFSET),//offset adjust, um
-	.FP_CH0_NF(`FP_CH3_NF), //gain compensation, around 1.0
-	.FP_CH1_NF(`FP_CH4_NF), //
-	.FP_KXY(`FP_KXY), // 32 bit fp, BPM sensitivity, i.g. 0.42 dB/mm for ISAC BPM
-	.AVG_select(AVG_select), //Not in use, March 8,2023
-	.clk(DCLK),  
+	.FP_CH2_NF(GAIN_SETTING_Y), //gain compensation, around 1.0
+	.FP_KXY(`FP_KXY), // 32 bit fp, BPM sensitivity, i.g. 0.20261 dB/mm for Ferrite BPM
+	.LPF_en(LPF_en), 
+	.clk_fast(DCLK),  
 	.rst(maxmin_rst),
 	.gate(new_gate), //only calculate position inside this signal
    .IIR_OUT_K2(`IIR_OUT_K2),	
-	.CH0_ADC_OFFSET(16'b0), // HJ Nov 27, 2023
-	.CH1_ADC_OFFSET(16'b0), // HJ Nov 27, 2023
 	.cal_sel(cal_sel),
+	.decimate(decimate),
 	.clk_10Hz(clk_10Hz),
 	.A_comp(peak_C),
 	.B_comp(peak_D),
@@ -1011,31 +1201,6 @@ calculate_position cal_position_Y(
 	.fp_pos_mm_cal(Y_fp_pos)
 	
     );
-	 
-/* OLD declaration from Shengli
-calculate_position cal_position_Y(
-	.A_amp(ch2), //
-	.B_amp(ch3),//16 bit, amplitude signal 
-	.data_valid(), 
-	.OFFSET(`Y_OFFSET),//offset adjust, um
-	.FP_CH1_NF(`FP_CH3_NF), //gain compensation, around 1.0
-	.FP_CH2_NF(`FP_CH4_NF), //
-	.FP_KXY(`FP_KXY), // 32 bit fp, BPM sensitivity, i.g. 0.42 dB/mm for ISAC BPM
-	.is10mmpV(is10mmpV), //10mm/V or 1mm/V DAC
-	.AVG_select(AVG_select), //Not in use, March 8,2023
-	.clk(SCLK),  
-	.rst(SYS_RST),
-   .trig(bpm_trig), //start to integrate the signal at trig,
-   .IIR_OUT_K2(`IIR_OUT_K2),	
-	
-	.A_comp(peak_C),
-	.B_comp(peak_D),
-	.fp_pos_mm_LPF(Y_fp_pos),
-	.position(Y_Position)  //16 bit signed DAC value
-	
-    );
-	 
-*/
 	 
 //================ Fast FIFO to transfer 20 MHz data from FPGA to SoC ===================
 

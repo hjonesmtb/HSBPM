@@ -6,7 +6,7 @@
 /*
  * Modification history:
  * Feb.18,2021: created based on project E_linac_RF_shield_upgrade: chanel_block.v
- *
+ * Apr 8 2024: added 6 clock cycle delay to fp_chx_Amp
  */
  
 module channel_block(
@@ -16,7 +16,10 @@ module channel_block(
  
  input [FULL_WIDTH-1:0] din,
  input trig,
-
+ input in_valid, 
+ input ena_comb,
+ input [SF_WIDTH-1:0] alpha,// for comb filter
+ 
  //from fast fifo
  input fast_fifo_full,
  input fast_fifo_empty,
@@ -45,6 +48,8 @@ module channel_block(
  
 );
 
+reg [SF_WIDTH-1:0] fp_ch1, fp_ch2, fp_ch3, fp_ch4;
+
 //-------Circular buffer and trigger ----------------------------
 wire rd_C_buffer,event_rdy/*synthesis keep*/;
 wire [FULL_WIDTH-1:0] CB_din;
@@ -63,10 +68,36 @@ wire of3, nan3;
 wire [DATA_WIDTH:0] Amp_sum  = ch0 + ch1; 
 assign Amp_avg = Amp_sum[DATA_WIDTH:1]; //divided by 2
 
-altfp_fp2int conv_inst0(.dataa(fp_ch1_Amp),.clock(DCLK),.result(ch0), .overflow(of0), .nan(nan0));
-altfp_fp2int conv_inst1(.dataa(fp_ch2_Amp),.clock(DCLK),.result(ch1), .overflow(of1), .nan(nan1));
-altfp_fp2int conv_inst2(.dataa(fp_ch3_Amp),.clock(DCLK),.result(ch2), .overflow(of2), .nan(nan2));
-altfp_fp2int conv_inst3(.dataa(fp_ch4_Amp),.clock(DCLK),.result(ch3), .overflow(of3), .nan(nan3));
+reg [SF_WIDTH-1:0] fp_ch1_delay [6:0];
+reg [SF_WIDTH-1:0] fp_ch2_delay [6:0];
+reg [SF_WIDTH-1:0] fp_ch3_delay [6:0];
+reg [SF_WIDTH-1:0] fp_ch4_delay [6:0];
+
+integer i;
+// delay fp_chx_Amp signals by 6 clock cycles to keep in sync with Amp_avg
+always @ (posedge DCLK)
+    begin 
+		fp_ch1_delay[0] <= fp_ch1;
+		fp_ch2_delay[0] <= fp_ch2;
+		fp_ch3_delay[0] <= fp_ch3;
+		fp_ch4_delay[0] <= fp_ch4;
+      for (i = 1; i<=4; i=i+1) begin
+			fp_ch1_delay[i] <= fp_ch1_delay[i-1];
+			fp_ch2_delay[i] <= fp_ch2_delay[i-1];
+			fp_ch3_delay[i] <= fp_ch3_delay[i-1];
+			fp_ch4_delay[i] <= fp_ch4_delay[i-1];
+		end
+		fp_ch1_Amp <= fp_ch1_delay[4];
+		fp_ch2_Amp <= fp_ch2_delay[4];
+		fp_ch3_Amp <= fp_ch3_delay[4];
+		fp_ch4_Amp <= fp_ch4_delay[4];
+	 end	
+
+// This adds 6 clock cycles of latency between amp_avg and the signal output
+altfp_fp2int conv_inst0(.dataa(fp_ch1),.clock(DCLK),.result(ch0), .overflow(of0), .nan(nan0));
+altfp_fp2int conv_inst1(.dataa(fp_ch2),.clock(DCLK),.result(ch1), .overflow(of1), .nan(nan1));
+altfp_fp2int conv_inst2(.dataa(fp_ch3),.clock(DCLK),.result(ch2), .overflow(of2), .nan(nan2));
+altfp_fp2int conv_inst3(.dataa(fp_ch4),.clock(DCLK),.result(ch3), .overflow(of3), .nan(nan3));
 
 assign CB_din = (waveform_select == 0)? din : 
 					 (waveform_select == 1)? Amp : din;
@@ -112,9 +143,12 @@ DDC DDC_inst(
 	.din_2(din[47:32]),//16 bit ADC value 
 	.din_3(din[63:48]),//16 bit ADC value 
 	
+	.in_valid(in_valid),
+	.ena_comb(ena_comb),
+	.alpha(alpha),	
 	.clk(clk),  //ADC clk, ~ 20.xxxx MHz. 
 	.rst(SYS_RST),
-  	
+	
 	.d_clk(d_clk), //clk for output data
 	.clken(clken), //for output data
 	.error(DDC_error), 
@@ -124,13 +158,14 @@ DDC DDC_inst(
 	.fp_ch4_Amp(fp_ch3_buf)
     );
 
-	 
+
+	 //  1 clock
 always @ (posedge DCLK) 
 	begin
-	   fp_ch1_Amp <= fp_ch0_buf; 
-		fp_ch2_Amp <= fp_ch1_buf; 
-		fp_ch3_Amp <= fp_ch2_buf; 
-		fp_ch4_Amp <= fp_ch3_buf; 		
+	   fp_ch1 <= fp_ch0_buf; 
+		fp_ch2 <= fp_ch1_buf; 
+		fp_ch3 <= fp_ch2_buf; 
+		fp_ch4 <= fp_ch3_buf; 		
 	end
 
 
