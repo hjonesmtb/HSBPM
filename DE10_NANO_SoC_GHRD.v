@@ -14,7 +14,7 @@
 //-----------------------------
 
 //parameter FPGA_VERSION_NO = 32'd0047; //verification
-parameter FPGA_VERSION_NO = 32'd20240405; // Modified on April 05, 2024
+parameter FPGA_VERSION_NO = 32'd20240410; // Modified on April 10, 2024
 
 module DE10_NANO_SoC_GHRD(
 
@@ -432,181 +432,183 @@ parameter HIGH_GAIN_STATE = 2;
 // this state is for manual gain control
 parameter MANUAL_GAIN = 3; 
 
-always @(posedge new_gate)
-begin
-	if(SYS_RST)
-		begin
-			gain_state <= MANUAL_GAIN;
-//			// default to HIGH range
-//			GAIN_SETTING_X <= `CH2_HIGH_GAIN;
-//			GAIN_EN_AUTO <= 1;
-//			ATTEN_EN_AUTO <= 0;
-		end
-	else
-		begin
-	
-			GAIN_SETTING_Y <= `FP_CH4_NF;
-	
-			case(gain_state)
-				LOW_GAIN_STATE:
-				begin
-					
-					if(!ena_gainctrl) begin
-						gain_state <= MANUAL_GAIN;
-					end
-					
-					else if(Amp_avg < 16'd2000) begin
-						gain_state <= MED_GAIN_STATE;
-						
-						GAIN_SETTING_X <= `CH2_MED_GAIN;
-						GAIN_EN_AUTO <= 1'b0;
-						ATTEN_EN_AUTO <= 1'b0;	
-					end
-					else begin
-						GAIN_SETTING_X <= `CH2_LOW_GAIN;
-						GAIN_EN_AUTO <= 1'b0;
-						ATTEN_EN_AUTO <= 1'b1;
-					end
-				end
-				
-				MED_GAIN_STATE: 
-				begin
-					
-					if(!ena_gainctrl) begin
-						gain_state <= MANUAL_GAIN;
-					end
-					
-					else if(Amp_avg > 16'd30000) begin
-						gain_state <= LOW_GAIN_STATE;
-						
-						GAIN_SETTING_X <= `CH2_LOW_GAIN;
-						GAIN_EN_AUTO <= 1'b0;
-						ATTEN_EN_AUTO <= 1'b1;
-					end
-					else if(Amp_avg < 16'd5000) begin 
-						gain_state <= HIGH_GAIN_STATE;
-						
-						GAIN_SETTING_X <= `CH2_HIGH_GAIN;
-						GAIN_EN_AUTO <= 1'b1;
-						ATTEN_EN_AUTO <= 1'b0;
-					end
-					else begin
-						GAIN_SETTING_X <= `CH2_MED_GAIN;
-						GAIN_EN_AUTO <= 1'b0;
-						ATTEN_EN_AUTO <= 1'b0;	
-					end
-				end
-									
-				HIGH_GAIN_STATE:
-				begin
-					
-					if(!ena_gainctrl) begin
-						gain_state <= MANUAL_GAIN;
-					end
-					
-					else if(Amp_avg > 16'd30000) begin
-						gain_state <= MED_GAIN_STATE;
-						
-						GAIN_SETTING_X <= `CH2_MED_GAIN;
-						GAIN_EN_AUTO <= 1'b0;
-						ATTEN_EN_AUTO <= 1'b0;	
-					end
-					
-					else begin
-						GAIN_SETTING_X <= `CH2_HIGH_GAIN;
-						GAIN_EN_AUTO <= 1'b1;
-						ATTEN_EN_AUTO <= 1'b0;
-					end
-				end
-				// manually choose gain range using CON_REG_L[0:1] 
-				// for this state, GAIN_EN and ATTEN_EN are driven wires
-				MANUAL_GAIN: 
-				begin	
-					if (ena_gainctrl) begin
-						gain_state <= HIGH_GAIN_STATE;
-						
-						GAIN_SETTING_X <= `CH2_HIGH_GAIN;
-						GAIN_EN_AUTO <= 1'b1;
-						ATTEN_EN_AUTO <= 1'b0;
-					end
-					
-					else begin
-						if(GAIN_EN && ~ATTEN_EN) begin
-							GAIN_SETTING_X <= `CH2_HIGH_GAIN;
-						end
-						else if(~GAIN_EN && ATTEN_EN) begin
-							GAIN_SETTING_X <= `CH2_LOW_GAIN;
-						end
-						else begin
-							GAIN_SETTING_X <= `CH2_MED_GAIN;
-						end
-					end
-				end
-				
-				default:
-					begin 
-						gain_state <= MANUAL_GAIN;
-					end
-					
-			endcase
-		end
-
-end
-
-//always@(posedge SCLK) begin
+//always @(posedge new_gate)
+//begin
+//	if(SYS_RST)
+//		begin
+//			gain_state <= MANUAL_GAIN;
+////			// default to HIGH range
+////			GAIN_SETTING_X <= `CH2_HIGH_GAIN;
+////			GAIN_EN_AUTO <= 1;
+////			ATTEN_EN_AUTO <= 0;
+//		end
+//	else
+//		begin
 //	
-//	/*
-//	HIGH GAIN RANGE: 0 - 30,000 
-//	MED GAIN RANGE : 5,000 - 25,000 
-//	LOW GAIN RANGE : 4,000+ 
-//	*/
+//			GAIN_SETTING_Y <= `FP_CH4_NF;
 //	
-//	Amp_latched <= Amp_avg;
+//			case(gain_state)
+//				LOW_GAIN_STATE:
+//				begin
+//					
+//					if(!ena_gainctrl) begin
+//						gain_state <= MANUAL_GAIN;
+//					end
+//					
+//					else if(Amp_avg < 16'd2000) begin
+//						gain_state <= MED_GAIN_STATE;
+//						
+//						GAIN_SETTING_X <= `CH2_MED_GAIN;
+//						GAIN_EN_AUTO <= 1'b0;
+//						ATTEN_EN_AUTO <= 1'b0;	
+//					end
+//					else begin
+//						GAIN_SETTING_X <= `CH2_LOW_GAIN;
+//						GAIN_EN_AUTO <= 1'b0;
+//						ATTEN_EN_AUTO <= 1'b1;
+//					end
+//				end
+//				
+//				MED_GAIN_STATE: 
+//				begin
+//					
+//					if(!ena_gainctrl) begin
+//						gain_state <= MANUAL_GAIN;
+//					end
+//					
+//					else if(Amp_avg > 16'd30000) begin
+//						gain_state <= LOW_GAIN_STATE;
+//						
+//						GAIN_SETTING_X <= `CH2_LOW_GAIN;
+//						GAIN_EN_AUTO <= 1'b0;
+//						ATTEN_EN_AUTO <= 1'b1;
+//					end
+//					else if(Amp_avg < 16'd5000) begin 
+//						gain_state <= HIGH_GAIN_STATE;
+//						
+//						GAIN_SETTING_X <= `CH2_HIGH_GAIN;
+//						GAIN_EN_AUTO <= 1'b1;
+//						ATTEN_EN_AUTO <= 1'b0;
+//					end
+//					else begin
+//						GAIN_SETTING_X <= `CH2_MED_GAIN;
+//						GAIN_EN_AUTO <= 1'b0;
+//						ATTEN_EN_AUTO <= 1'b0;	
+//					end
+//				end
+//									
+//				HIGH_GAIN_STATE:
+//				begin
+//					
+//					if(!ena_gainctrl) begin
+//						gain_state <= MANUAL_GAIN;
+//					end
+//					
+//					else if(Amp_avg > 16'd30000) begin
+//						gain_state <= MED_GAIN_STATE;
+//						
+//						GAIN_SETTING_X <= `CH2_MED_GAIN;
+//						GAIN_EN_AUTO <= 1'b0;
+//						ATTEN_EN_AUTO <= 1'b0;	
+//					end
+//					
+//					else begin
+//						GAIN_SETTING_X <= `CH2_HIGH_GAIN;
+//						GAIN_EN_AUTO <= 1'b1;
+//						ATTEN_EN_AUTO <= 1'b0;
+//					end
+//				end
+//				// manually choose gain range using CON_REG_L[0:1] 
+//				// for this state, GAIN_EN and ATTEN_EN are driven wires
+//				MANUAL_GAIN: 
+//				begin	
+//					if (ena_gainctrl) begin
+//						gain_state <= HIGH_GAIN_STATE;
+//						
+//						GAIN_SETTING_X <= `CH2_HIGH_GAIN;
+//						GAIN_EN_AUTO <= 1'b1;
+//						ATTEN_EN_AUTO <= 1'b0;
+//					end
+//					
+//					else begin
+//						if(GAIN_EN && ~ATTEN_EN) begin
+//							GAIN_SETTING_X <= `CH2_HIGH_GAIN;
+//						end
+//						else if(~GAIN_EN && ATTEN_EN) begin
+//							GAIN_SETTING_X <= `CH2_LOW_GAIN;
+//						end
+//						else begin
+//							GAIN_SETTING_X <= `CH2_MED_GAIN;
+//						end
+//					end
+//				end
+//				
+//				default:
+//					begin 
+//						gain_state <= MANUAL_GAIN;
+//					end
+//					
+//			endcase
+//		end
 //
-//	GAIN_SETTING_Y <= `FP_CH4_NF;
-//	
-//	if(ena_gainctrl) begin
-//		// HIGH range
-//		if((GAIN_EN_AUTO & ~ATTEN_EN_AUTO) && (Amp_latched > 16'd30000)) begin
-//			GAIN_SETTING_X <= `CH2_MED_GAIN;
-//			GAIN_EN_AUTO <= 1'b0;
-//			ATTEN_EN_AUTO <= 1'b0;
-//			
-//		end
-//		// MED range
-//		else if(~GAIN_EN_AUTO & ~ATTEN_EN_AUTO) begin
-//			if(Amp_latched > 16'd40000) begin
-//				GAIN_SETTING_X <= `CH2_LOW_GAIN;
-//				GAIN_EN_AUTO <= 1'b0;
-//				ATTEN_EN_AUTO <= 1'b1;
-//			end
-//			else if(Amp_latched < 16'd5000) begin // 3500 bits (~5 dBm) hysteresis from MED-HIGH transition
-//				GAIN_SETTING_X <= `CH2_HIGH_GAIN;
-//				GAIN_EN_AUTO <= 1'b1;
-//				ATTEN_EN_AUTO <= 1'b0;
-//			end
-//		end
-//		// LOW range
-//		else if((~GAIN_EN_AUTO & ATTEN_EN_AUTO) && (Amp_latched < 16'd2500)) begin // ~1500 bits hysteresis from MED-LOW transition
-//			GAIN_SETTING_X <= `CH2_MED_GAIN;
-//			GAIN_EN_AUTO <= 1'b0;
-//			ATTEN_EN_AUTO <= 1'b0;
-//		end
-//	end
-//	
-//	else begin
-//		if(GAIN_EN && ~ATTEN_EN) begin
-//			GAIN_SETTING_X <= `CH2_HIGH_GAIN;
-//		end
-//		
-//		else if(~GAIN_EN && ATTEN_EN) begin
-//			GAIN_SETTING_X <= `CH2_LOW_GAIN;
-//		end
-//		else begin
-//			GAIN_SETTING_X <= `CH2_MED_GAIN;
-//		end
-//	end
 //end
+
+always@(posedge SCLK) begin
+	
+	/*
+	HIGH GAIN RANGE: 0 - 30,000 
+	MED GAIN RANGE : 5,000 - 25,000 
+	LOW GAIN RANGE : 4,000+ 
+	*/
+	
+	if(new_gate) begin
+		Amp_latched <= Amp_avg;
+	end
+	
+	GAIN_SETTING_Y <= `FP_CH4_NF;
+	
+	if(ena_gainctrl) begin
+		// HIGH range
+		if((GAIN_EN_AUTO & ~ATTEN_EN_AUTO) && (Amp_latched > 16'd30000)) begin
+			GAIN_SETTING_X <= `CH2_MED_GAIN;
+			GAIN_EN_AUTO <= 1'b0;
+			ATTEN_EN_AUTO <= 1'b0;
+			
+		end
+		// MED range
+		else if(~GAIN_EN_AUTO & ~ATTEN_EN_AUTO) begin
+			if(Amp_latched > 16'd30000) begin
+				GAIN_SETTING_X <= `CH2_LOW_GAIN;
+				GAIN_EN_AUTO <= 1'b0;
+				ATTEN_EN_AUTO <= 1'b1;
+			end
+			else if(Amp_latched < 16'd5000) begin // 3500 bits (~5 dBm) hysteresis from MED-HIGH transition
+				GAIN_SETTING_X <= `CH2_HIGH_GAIN;
+				GAIN_EN_AUTO <= 1'b1;
+				ATTEN_EN_AUTO <= 1'b0;
+			end
+		end
+		// LOW range
+		else if((~GAIN_EN_AUTO & ATTEN_EN_AUTO) && (Amp_latched < 16'd2000)) begin // ~1500 bits hysteresis from MED-LOW transition
+			GAIN_SETTING_X <= `CH2_MED_GAIN;
+			GAIN_EN_AUTO <= 1'b0;
+			ATTEN_EN_AUTO <= 1'b0;
+		end
+	end
+	
+	else begin
+		if(GAIN_EN && ~ATTEN_EN) begin
+			GAIN_SETTING_X <= `CH2_HIGH_GAIN;
+		end
+		
+		else if(~GAIN_EN && ATTEN_EN) begin
+			GAIN_SETTING_X <= `CH2_LOW_GAIN;
+		end
+		else begin
+			GAIN_SETTING_X <= `CH2_MED_GAIN;
+		end
+	end
+end
 
 
 //							================ Defining CPU to FPGA interface ===============

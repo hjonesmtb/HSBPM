@@ -16,10 +16,10 @@ module DDC(
 	
 	input in_valid,
 	input ena_comb,
-  	input [SF_WIDTH-1:0] alpha,	
+	
 	input clk,  //20 MHz 
 	input rst,
-
+  	
 	output d_clk, //clk for decimated data
 	output clken, //for decimated data
 	output [DATA_WIDTH-1:0] error, 
@@ -196,7 +196,6 @@ combfilter comb_inst1(
     .rst(),
 	 	 
     .data_in(fp_ch0), //input data 
-	 .alpha(alpha),
     .data_out(fp_ch1_comb), //output data
 	 .overflow() //calculation overflow 
 	);
@@ -207,7 +206,6 @@ combfilter comb_inst2(
     .rst(),
 	 	 
     .data_in(fp_ch1), //input data 
-	 .alpha(alpha),
     .data_out(fp_ch2_comb), //output data
 	 .overflow() //calculation overflow 
 	);
@@ -218,7 +216,6 @@ combfilter comb_inst3(
     .rst(),
 	 	 
     .data_in(fp_ch2), //input data 
-	 .alpha(alpha),
     .data_out(fp_ch3_comb), //output data
 	 .overflow() //calculation overflow 
 	);
@@ -229,19 +226,18 @@ combfilter comb_inst4(
     .rst(),
 	 	 
     .data_in(fp_ch3), //input data 
-	 .alpha(alpha),
     .data_out(fp_ch4_comb), //output data
 	 .overflow() //calculation overflow 
 	);
 	
-assign fp_ch1_scale = ena_comb? fp_ch1_comb : fp_ch0;
-assign fp_ch2_scale = ena_comb? fp_ch2_comb : fp_ch1;
-assign fp_ch3_scale = ena_comb? fp_ch3_comb : fp_ch2;
-assign fp_ch4_scale = ena_comb? fp_ch4_comb : fp_ch3;
+assign fp_ch1_Amp = ena_comb? fp_ch1_comb : fp_ch1_scale;
+assign fp_ch2_Amp = ena_comb? fp_ch2_comb : fp_ch2_scale;
+assign fp_ch3_Amp = ena_comb? fp_ch3_comb : fp_ch3_scale;
+assign fp_ch4_Amp = ena_comb? fp_ch4_comb : fp_ch4_scale;
 	
-altfp_mul mul_inst0 (.dataa(fp_ch1_scale), .datab(FP_0002), .clock(clk), .result(fp_ch1_Amp) );
-altfp_mul mul_inst1 (.dataa(fp_ch2_scale), .datab(FP_0002), .clock(clk), .result(fp_ch2_Amp) );
-altfp_mul mul_inst2 (.dataa(fp_ch3_scale), .datab(FP_0002), .clock(clk), .result(fp_ch3_Amp) );
-altfp_mul mul_inst3 (.dataa(fp_ch4_scale), .datab(FP_0002), .clock(clk), .result(fp_ch4_Amp) );
+altfp_mul mul_inst0 (.dataa(fp_ch0), .datab(FP_0002), .clock(clk), .result(fp_ch1_scale) );
+altfp_mul mul_inst1 (.dataa(fp_ch1), .datab(FP_0002), .clock(clk), .result(fp_ch2_scale) );
+altfp_mul mul_inst2 (.dataa(fp_ch2), .datab(FP_0002), .clock(clk), .result(fp_ch3_scale) );
+altfp_mul mul_inst3 (.dataa(fp_ch3), .datab(FP_0002), .clock(clk), .result(fp_ch4_scale) );
 
 endmodule

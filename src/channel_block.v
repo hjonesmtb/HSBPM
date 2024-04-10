@@ -145,7 +145,7 @@ DDC DDC_inst(
 	
 	.in_valid(in_valid),
 	.ena_comb(ena_comb),
-	.alpha(alpha),	
+	
 	.clk(clk),  //ADC clk, ~ 20.xxxx MHz. 
 	.rst(SYS_RST),
 	
