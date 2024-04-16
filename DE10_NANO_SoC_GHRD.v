@@ -11,10 +11,12 @@
 // Jan 05 2024 - added 15 tap FIR on ADC input to reduce noise. Filter has 4x gain to increase threshold.
 // Jan 09 2024 - Added vertical (Y) channel. Not working/tested yet.
 // 
+
+// Apr 16 2024 - Updating Code for V4. Changed pinout for Temp sensor, EEPROM I2C, LO, and HPS_RESET.
 //-----------------------------
 
 //parameter FPGA_VERSION_NO = 32'd0047; //verification
-parameter FPGA_VERSION_NO = 32'd20240410; // Modified on April 10, 2024
+parameter FPGA_VERSION_NO = 32'd20240416; // Modified on April 16, 2024
 
 module DE10_NANO_SoC_GHRD(
 
@@ -165,16 +167,16 @@ module DE10_NANO_SoC_GHRD(
 	input  GPIO_0_12, //ADC_DD12
 	input  GPIO_0_15, //ADC_DD13
 	 
-	 input  GPIO_0_32,  //HPS_Cold_Reset 
+	 input  GPIO_0_32,  //LO
 	 output GPIO_0_34,  //LED_RUNNING
 	 output GPIO_0_35,  //LED_Fault
 		 
 	 //i2c eeprom
 	 output GPIO_0_31, //SCL
-	 inout  GPIO_0_33, //SDA
+	 inout  GPIO_0_33, //HPS_Cold_Reset 
 	 
-	 input GPIO_0_28, //LO 
-	 inout GPIO_0_30, //temp	 
+	 input GPIO_0_28, //Temp 
+	 inout GPIO_0_30, //SDA	 
 	 
     //////////// KEY //////////
     input    [ 1: 0]    KEY,
@@ -253,7 +255,7 @@ wire ext_trigger = GPIO_1_0;
 
 wire LED_RUNNING;
 wire LED_Fault = Cold_Reset_Req;
-wire Cold_Reset_Req = ~GPIO_0_32;  // cold reset push button from front panel 
+wire Cold_Reset_Req = ~GPIO_0_33;  // cold reset push button from front panel 
 assign GPIO_0_34 = LED_RUNNING;  // LED_COMM, indicating communication activity, not implemented yet.
 assign GPIO_0_35 = LED_Fault;  // should response to reset_push button action? 
 
@@ -350,9 +352,9 @@ clk20_pll clk_pll_inst0
 		.locked()  //locked output
 	);
 	
-clk_control clkcon_inst  //using external clk to drive GCLK network, since GPIO_0_28 is not dedicated clk pin
+clk_control clkcon_inst  //using external clk to drive GCLK network, since GPIO_0_32 is not dedicated clk pin
 	(
-	 .inclk(GPIO_0_28),  //External RF clk 23.05 MHz from Cyclotron
+	 .inclk(GPIO_0_32),  //External RF clk 23.05 MHz from Cyclotron
 	 .outclk(ex_CLK)
 	 );
 	
@@ -412,7 +414,7 @@ wire rd_eeprom,wr_eeprom /*synthesis keep*/;
 			 .busy(eeprom_busy),
 			 .valid(eeprom_data_valid),
 
-          .SDA(GPIO_0_33),
+          .SDA(GPIO_0_30),
           .SCL(GPIO_0_31)               
                      );
 	
@@ -1309,7 +1311,7 @@ reg [15:0] temp, humi;
 dht11 temp_sensor(
 	.i_clk(SYS_CLK),
 	.i_rst_n(1'b1), //always enable
-	.io_data(GPIO_0_30),
+	.io_data(GPIO_0_28),
 	.o_temp(temp),
 	.o_humi(humi)
 	);
