@@ -16,7 +16,7 @@
 //-----------------------------
 
 //parameter FPGA_VERSION_NO = 32'd0047; //verification
-parameter FPGA_VERSION_NO = 32'd20240416; // Modified on April 16, 2024
+parameter FPGA_VERSION_NO = 32'd20240424; // Modified on April 24, 2024
 
 module DE10_NANO_SoC_GHRD(
 
@@ -173,9 +173,9 @@ module DE10_NANO_SoC_GHRD(
 		 
 	 //i2c eeprom
 	 output GPIO_0_31, //SCL
-	 inout  GPIO_0_33, //HPS_Cold_Reset 
+	 input  GPIO_0_33, //HPS_Cold_Reset 
 	 
-	 input GPIO_0_28, //Temp 
+	 inout GPIO_0_28, //Temp 
 	 inout GPIO_0_30, //SDA	 
 	 
     //////////// KEY //////////
@@ -555,7 +555,7 @@ parameter MANUAL_GAIN = 3;
 //
 //end
 
-always@(posedge SCLK) begin
+always@(posedge new_gate) begin
 	
 	/*
 	HIGH GAIN RANGE: 0 - 30,000 
@@ -563,15 +563,11 @@ always@(posedge SCLK) begin
 	LOW GAIN RANGE : 4,000+ 
 	*/
 	
-	if(new_gate) begin
-		Amp_latched <= Amp_avg;
-	end
-	
 	GAIN_SETTING_Y <= `FP_CH4_NF;
 	
 	if(ena_gainctrl) begin
 		// HIGH range
-		if((GAIN_EN_AUTO & ~ATTEN_EN_AUTO) && (Amp_latched > 16'd30000)) begin
+		if((GAIN_EN_AUTO & ~ATTEN_EN_AUTO) && (Amp_avg > 16'd30000)) begin
 			GAIN_SETTING_X <= `CH2_MED_GAIN;
 			GAIN_EN_AUTO <= 1'b0;
 			ATTEN_EN_AUTO <= 1'b0;
@@ -579,19 +575,19 @@ always@(posedge SCLK) begin
 		end
 		// MED range
 		else if(~GAIN_EN_AUTO & ~ATTEN_EN_AUTO) begin
-			if(Amp_latched > 16'd30000) begin
+			if(Amp_avg > 16'd30000) begin
 				GAIN_SETTING_X <= `CH2_LOW_GAIN;
 				GAIN_EN_AUTO <= 1'b0;
 				ATTEN_EN_AUTO <= 1'b1;
 			end
-			else if(Amp_latched < 16'd5000) begin // 3500 bits (~5 dBm) hysteresis from MED-HIGH transition
+			else if(Amp_avg < 16'd5000) begin // 3500 bits (~5 dBm) hysteresis from MED-HIGH transition
 				GAIN_SETTING_X <= `CH2_HIGH_GAIN;
 				GAIN_EN_AUTO <= 1'b1;
 				ATTEN_EN_AUTO <= 1'b0;
 			end
 		end
 		// LOW range
-		else if((~GAIN_EN_AUTO & ATTEN_EN_AUTO) && (Amp_latched < 16'd2000)) begin // ~1500 bits hysteresis from MED-LOW transition
+		else if((~GAIN_EN_AUTO & ATTEN_EN_AUTO) && (Amp_avg < 16'd2000)) begin // ~1500 bits hysteresis from MED-LOW transition
 			GAIN_SETTING_X <= `CH2_MED_GAIN;
 			GAIN_EN_AUTO <= 1'b0;
 			ATTEN_EN_AUTO <= 1'b0;
@@ -1059,15 +1055,15 @@ wire [FULL_WIDTH-1:0] channel_dout; // 64 bit signal with 4 channel data for fas
 //and start transfering waveform to fast_fifo at the same time.
 //wire [FULL_WIDTH-1:0] Amp;  //64 bit , 4 channel amplitude data
 wire [DATA_WIDTH-1:0] channel_error;
-wire [DATA_WIDTH-1:0] Amp_avg/*synthesis keep*/;
+wire [DATA_WIDTH:0] Amp_avg/*synthesis keep*/; // modified Apr 24 to have 1 more bit.
 wire [SF_WIDTH-1:0] fp_ch1_Amp; // FP format, Demodulated waveform 
 wire [SF_WIDTH-1:0] fp_ch2_Amp;
 wire [SF_WIDTH-1:0] fp_ch3_Amp;
 wire [SF_WIDTH-1:0] fp_ch4_Amp;
 
-// ----------------------- Convert raw data into demodulated signal ------------------------------
 
-reg in_valid; // 1.15 MHz for comb filter
+// Generate 1.15 MHz (LO/20) Comb Filter clock
+reg in_valid; 
 reg [9:0] in_valid_cnt;
 
 always@(posedge ex_CLK) begin
@@ -1083,6 +1079,8 @@ always@(posedge ex_CLK) begin
 		in_valid <= 0;
 	end
 end
+
+// ----------------------- Convert raw data into demodulated signal ------------------------------
 
 channel_block Ch_XY_inst(
  .clk(SCLK), //ADC clock
