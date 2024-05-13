@@ -157,8 +157,7 @@ DDC DDC_inst(
 	.fp_ch3_Amp(fp_ch2_buf),
 	.fp_ch4_Amp(fp_ch3_buf)
     );
-
-
+	 
 	 //  1 clock
 always @ (posedge DCLK) 
 	begin
@@ -167,7 +166,6 @@ always @ (posedge DCLK)
 		fp_ch3 <= fp_ch2_buf; 
 		fp_ch4 <= fp_ch3_buf; 		
 	end
-
 
 //--------------------------------------------------------
 // compensation FIR

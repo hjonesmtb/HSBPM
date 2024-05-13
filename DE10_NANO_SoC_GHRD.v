@@ -14,7 +14,7 @@
 //-----------------------------
 
 //parameter FPGA_VERSION_NO = 32'd0047; //verification
-parameter FPGA_VERSION_NO = 32'd20240410; // Modified on April 10, 2024
+parameter FPGA_VERSION_NO = 32'd20240426; // Modified on April 10, 2024
 
 module DE10_NANO_SoC_GHRD(
 
@@ -421,7 +421,7 @@ reg [SF_WIDTH-1:0] GAIN_SETTING_X;
 reg [SF_WIDTH-1:0] GAIN_SETTING_Y;
 
 reg GAIN_EN_AUTO, ATTEN_EN_AUTO;
-reg [DATA_WIDTH-1:0] Amp_latched; // latched value of Amp_avg
+reg [DATA_WIDTH:0] Amp_latched; // latched value of Amp_avg
 
 reg [2:0] gain_state;
 
@@ -553,7 +553,7 @@ parameter MANUAL_GAIN = 3;
 //
 //end
 
-always@(posedge SCLK) begin
+always@(posedge new_gate) begin
 	
 	/*
 	HIGH GAIN RANGE: 0 - 30,000 
@@ -561,35 +561,35 @@ always@(posedge SCLK) begin
 	LOW GAIN RANGE : 4,000+ 
 	*/
 	
-	if(new_gate) begin
-		Amp_latched <= Amp_avg;
-	end
-	
+//	if(new_gate) begin
+//		Amp_latched <= Amp_avg;
+//	end
+//	
 	GAIN_SETTING_Y <= `FP_CH4_NF;
 	
 	if(ena_gainctrl) begin
 		// HIGH range
-		if((GAIN_EN_AUTO & ~ATTEN_EN_AUTO) && (Amp_latched > 16'd30000)) begin
+		if((GAIN_EN_AUTO && !ATTEN_EN_AUTO) && (Amp_avg > 16'd30000)) begin
 			GAIN_SETTING_X <= `CH2_MED_GAIN;
 			GAIN_EN_AUTO <= 1'b0;
 			ATTEN_EN_AUTO <= 1'b0;
 			
 		end
 		// MED range
-		else if(~GAIN_EN_AUTO & ~ATTEN_EN_AUTO) begin
-			if(Amp_latched > 16'd30000) begin
+		else if(!GAIN_EN_AUTO && !ATTEN_EN_AUTO) begin
+			if(Amp_avg > 16'd30000) begin
 				GAIN_SETTING_X <= `CH2_LOW_GAIN;
 				GAIN_EN_AUTO <= 1'b0;
 				ATTEN_EN_AUTO <= 1'b1;
 			end
-			else if(Amp_latched < 16'd5000) begin // 3500 bits (~5 dBm) hysteresis from MED-HIGH transition
+			else if(Amp_avg < 16'd5000) begin // 3500 bits (~5 dBm) hysteresis from MED-HIGH transition
 				GAIN_SETTING_X <= `CH2_HIGH_GAIN;
 				GAIN_EN_AUTO <= 1'b1;
 				ATTEN_EN_AUTO <= 1'b0;
 			end
 		end
 		// LOW range
-		else if((~GAIN_EN_AUTO & ATTEN_EN_AUTO) && (Amp_latched < 16'd2000)) begin // ~1500 bits hysteresis from MED-LOW transition
+		else if((!GAIN_EN_AUTO && ATTEN_EN_AUTO) && (Amp_avg < 16'd2000)) begin // ~1500 bits hysteresis from MED-LOW transition
 			GAIN_SETTING_X <= `CH2_MED_GAIN;
 			GAIN_EN_AUTO <= 1'b0;
 			ATTEN_EN_AUTO <= 1'b0;
@@ -597,11 +597,11 @@ always@(posedge SCLK) begin
 	end
 	
 	else begin
-		if(GAIN_EN && ~ATTEN_EN) begin
+		if(GAIN_EN && !ATTEN_EN) begin
 			GAIN_SETTING_X <= `CH2_HIGH_GAIN;
 		end
 		
-		else if(~GAIN_EN && ATTEN_EN) begin
+		else if(!GAIN_EN && ATTEN_EN) begin
 			GAIN_SETTING_X <= `CH2_LOW_GAIN;
 		end
 		else begin
