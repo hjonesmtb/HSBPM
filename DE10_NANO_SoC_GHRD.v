@@ -16,7 +16,7 @@
 //-----------------------------
 
 //parameter FPGA_VERSION_NO = 32'd0047; //verification
-parameter FPGA_VERSION_NO = 32'd20240424; // Modified on April 24, 2024
+parameter FPGA_VERSION_NO = 32'd20240530; // Modified on April 24, 2024
 
 module DE10_NANO_SoC_GHRD(
 
@@ -246,10 +246,10 @@ wire ST_EN; // 1126 Hz duty cycle for calibration source
 
 assign GPIO_1_3 = ATTEN_A1; // enable/disable -20 dB attenuation of calibration signal
 assign GPIO_1_1 = ATTEN_A0; // enable/disable -10 dB attenuation of calibration signal
-assign GPIO_1_2 = Ena_ST? 1'b1 : ST_on; // enable/disable calibration 
+assign GPIO_1_2 = Ena_ST? 1'b1 : clk_10Hz; // enable/disable calibration. Changed from ST_on on may23
 assign GPIO_1_5 = GAIN_EN;  // enable/disable VGA gain
 assign GPIO_1_4 = ATTEN_EN; // enable/disable VGA attenuation
-assign GPIO_1_7 = (Ena_ST | cal_sel)? ST_EN : 1'b0;    // Modulate calibration signal if autocalibrating or self-testing.
+assign GPIO_1_7 = (Ena_ST | cal_sel)? clk_10Hz : 1'b0;    // Modulate calibration signal if autocalibrating or self-testing. Changed from ST_EN on may23
 
 wire ext_trigger = GPIO_1_0;	 
 
@@ -968,7 +968,7 @@ self_trigger self_trigger_inst(
 );
 
 // ================ Processing ==============
-reg clk_10Hz; // 1Hz pulse with 0.2% duty cycle (2ms width)
+reg clk_10Hz; // 1Hz pulse with 10% duty cycle (100ms width)
 parameter T_1s = 2500000; // # of clk cycles in 1 second
 reg [21:0] count_10Hz; // count to 2.5 million
 
@@ -983,11 +983,11 @@ always @ (posedge DCLK) begin
 	end
 	
 	if(cal_sel) begin
-		if(count_10Hz == T_1s - 5000) begin
+		if(count_10Hz == T_1s - 250000) begin
 			clk_10Hz <= 1'b1;
 			ST_on <= 1'b1;
 		end
-		else if(count_10Hz == T_1s - 1000) begin
+		else if(count_10Hz == T_1s - 25000) begin
 			clk_10Hz <= 1'b0;
 		end
 		

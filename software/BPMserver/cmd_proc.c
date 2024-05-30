@@ -27,6 +27,12 @@ static inline uint32_t readReg(void* addr)
 }
 
 
+
+union Data {
+	int i;
+	float f;
+};
+	
 int dataArray[1024];
 extern void* VR_BASE;
 
@@ -38,6 +44,8 @@ void Load_Conf()
 
 int cmd_proc(char *cmdString_in , int *value_back, char **string_back, int **array_Ptr, int *array_Dim)
 {
+	union Data xpos;
+	union Data chA;
 		
 	char cmd[50],*sdp,*chp;
 
@@ -99,7 +107,15 @@ int cmd_proc(char *cmdString_in , int *value_back, char **string_back, int **arr
 		if ( strcmp(cmd,"SFIFO:WD?")== 0 ) {*value_back = readReg(VR_BASE+SFIFO_WD);return 1;}
 		if ( strcmp(cmd,"SFIFO?")== 0 ) {
     		for(cntr=0;cntr<PACKET_SIZE;cntr++){
-				dataArray[cntr]= readReg(VR_BASE+SFIFO);	
+				if(cntr == 6) {
+					xpos.i = readReg(VR_BASE+SFIFO); // read X position into memory;
+					chA.i = dataArray[2];
+					//xpos.f = xpos.f + 0.00001*(chA.f);
+					dataArray[6] = xpos.i;					
+				}
+				else{
+					dataArray[cntr]= readReg(VR_BASE+SFIFO);	
+				}
 			}
 			*array_Ptr = &dataArray[0]; *array_Dim = PACKET_SIZE;
     		return 3;}

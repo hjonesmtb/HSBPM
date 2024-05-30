@@ -8,6 +8,8 @@
 
 // Apr 05 2024, changed transition to transition-2 for a hopefully better alignment - HJ.
 
+// May 22 2024 changed HOLD_TIME_ms to 2 ms
+
 `timescale 1ns / 1ps
 module self_trigger(
 	input [DATA_WIDTH-1:0] signal, //postive always

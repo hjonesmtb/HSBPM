@@ -65,25 +65,38 @@ wire sigma_zero;
 wire [SF_WIDTH-1:0] sigma_div = sigma_zero? fp1 : sigma;
 
 reg [SF_WIDTH-1:0] A_scale,B_scale; // calibration values for each channel
+reg clk10_last;
 
-reg [SF_WIDTH-1:0] X_cal;
+reg [SF_WIDTH-1:0] X_cal, X_cal_prev, X_cal_diff; // these signals are from the calibration input, not the signal from the beam
+reg [SF_WIDTH-1:0] cal_pos_tmp; // the calibrated value, used to accumulate calibration error
+wire cal_zero;
 
 always @ (posedge clk_fast) begin
+
 	B_scale <= FP_CH2_NF;
 			if (gate) begin 
 				A_in <= A_amp;
 				B_in <= B_amp; 
-			end		
-
-			if(cal_sel) begin
-				if(clk_10Hz) begin
-					X_cal <= fp_pos_mm_LPF;
+				
+				cal_pos_tmp <= cal_zero? fp_pos_mm_LPF : fp_pos_mm_cal;
+				
+				// moved this block inside if to reduce noise
+				if(cal_sel) begin
+					clk10_last <= clk_10Hz;
+					X_cal_prev <= X_cal; // so the error isn;t double counted
+					if(!clk_10Hz && clk10_last) begin // the clk10 pulse needs to be longer than gate (4 ms max). It's currently 90 ms.
+						X_cal <= fp_pos_mm_LPF;
+					end
 				end
-			end
-			else begin
-				X_cal <= 0;
-			end
+				else begin
+					X_cal <= fp_pos_mm_LPF;
+					X_cal_prev <= fp_pos_mm_LPF;
+				end			
+			end	
 	end
+
+	
+altfp_sub sub_inst3 (.dataa(X_cal), .datab(X_cal_prev), .clock(clk), .result(X_cal_diff), .zero() ); // calibration
 
 // create integer signals
 wire [DATA_WIDTH-1:0] A_int_fast, A_int_slow, B_int_fast,B_int_slow;
@@ -144,7 +157,7 @@ altfp_mul mul_inst1 (.dataa(A_fp), .datab(fp1), .clock(clk), .result(A_comp) ); 
 altfp_mul mul_inst2 (.dataa(B_fp), .datab(B_scale), .clock(clk), .result(B_comp) ); // ajust gain. This could be done in fixed point.
 
 // delata sigma, 7 clks
-altfp_sub sub_inst1 (.dataa(A_comp), .datab(B_comp), .clock(clk), .result(delta) ); // Delta. 7 clks
+altfp_sub sub_inst1 (.dataa(A_comp), .datab(B_comp), .clock(clk), .result(delta), .zero() ); // Delta. 7 clks
 altfp_add add_inst1 (.dataa(A_comp), .datab(B_comp), .clock(clk), .result(sigma), .zero(sigma_zero) );// Sigma. 7 clks
 
 // division, 14 clks
@@ -177,9 +190,10 @@ LPF_IIR LPF_output_inst0(
 	 .K2(IIR_OUT_K2),
     .data_out(fp_pos_mm_LPF) //
     );
+
 	 
 // calibrate. 7 clks
-altfp_sub sub_inst2 (.dataa(fp_pos_mm_LPF), .datab(X_cal), .clock(clk), .result(fp_pos_mm_cal) ); // calibration
+altfp_sub sub_inst2 (.dataa(cal_pos_tmp), .datab(X_cal_diff), .clock(clk), .result(fp_pos_mm_cal), .zero(cal_zero)); // calibration
  
 endmodule
 
