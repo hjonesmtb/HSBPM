@@ -34,7 +34,6 @@ module calculate_position(
 	input [SF_WIDTH-1:0] IIR_OUT_K2, //LPF K2, fp
 	input dead_zone,
 	input decimate,
-	input clk_10Hz,
 	input flip_sign,
 	output [SF_WIDTH-1:0] A_comp,
 	output [SF_WIDTH-1:0] B_comp,
@@ -79,21 +78,7 @@ always @ (posedge clk_fast) begin
 	B_scale <= FP_CH2_NF;
 			if (gate && !dead_zone) begin 
 				A_in <= A_amp;
-				B_in <= B_amp; 
-				
-//				// moved this block inside if to reduce noise
-//				if(cal_sel) begin
-//					clk10_last <= clk_10Hz;
-//					X_cal_prev <= X_cal; // so the error isn;t double counted
-//					X_diff_acc_tmp <= X_diff_acc;
-//					if(!clk_10Hz && clk10_last) begin // the clk10 pulse needs to be longer than gate (4 ms max). It's currently 90 ms.
-//						X_cal <= fp_pos_mm_LPF;
-//					end
-//				end
-//				else begin
-//					X_cal <= fp_pos_mm_LPF;
-//					X_cal_prev <= fp_pos_mm_LPF;
-//				end			
+				B_in <= B_amp; 	
 			end	
 	end
 

@@ -19,7 +19,6 @@ module DDC(
 	
 	input clk,  //20 MHz 
 	input rst,
-	input flip_sign,
   	
 	output d_clk, //clk for decimated data
 	output clken, //for decimated data

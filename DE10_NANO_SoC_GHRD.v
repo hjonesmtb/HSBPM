@@ -16,7 +16,7 @@
 //-----------------------------
 
 //parameter FPGA_VERSION_NO = 32'd0047; //verification
-parameter FPGA_VERSION_NO = 32'd20240604; // Modified on April 24, 2024
+parameter FPGA_VERSION_NO = 32'd20240626; // Modified on April 24, 2024
 
 module DE10_NANO_SoC_GHRD(
 
@@ -92,13 +92,13 @@ module DE10_NANO_SoC_GHRD(
 	 //////////// GPIO //////////
 	 
 	 input GPIO_1_0,  // ext_trigger
-	 output GPIO_1_1, // ATTEN_A0 (for calibration source)
+	 output GPIO_1_1, // VC1
 	 output GPIO_1_2, // clk_cal (for calibration source) 
-	 output GPIO_1_3, // ATTEN_A1 (for calibration source) 
+	 output GPIO_1_3, // VC2
 
 	 output GPIO_1_4, // ATTEN_EN (VGA)               
 	 output GPIO_1_5, // GAIN_EN  (VGA)						
-	 output GPIO_1_7, // ST_EN    (1127 Hz duty cycle) - currently VGA_GAIN_A0
+	 output GPIO_1_7, // ST_pulse    (1127 Hz duty cycle) - currently VGA_GAIN_A0
 	 
 	//ADC 
 	// Channel 2 
@@ -240,16 +240,17 @@ assign stm_hw_events = {{15{1'b0}}, SW, fpga_led_internal, fpga_debounced_button
 
 
 // ========================= GPIO Pin Mapping ===============================
-wire ATTEN_A0, ATTEN_A1; // attenuation bits for calibration source
+reg VC1, VC2; // Crossbar switch control
+// wire ATTEN_A0, ATTEN_A1; // attenuation bits for calibration source
 wire GAIN_EN, ATTEN_EN; // gain, attenuation enable for VGA (+15 dB, -18 dB)
-wire ST_EN; // 1126 Hz duty cycle for calibration source
+wire ST_pulse; // 1126 Hz duty cycle for calibration source
 
-assign GPIO_1_3 = ATTEN_A1; // enable/disable -20 dB attenuation of calibration signal
-assign GPIO_1_1 = ATTEN_A0; // enable/disable -10 dB attenuation of calibration signal
-assign GPIO_1_2 = Ena_ST? 1'b1 : clk_cal; // Connected to AFE input switch. Changed from ST_on on may23
+assign GPIO_1_3 = VC2; 
+assign GPIO_1_1 = VC1; 
+assign GPIO_1_2 = Ena_ST; // Connected to AFE input selector to choose between external signal or self-test.
 assign GPIO_1_5 = GAIN_EN;  // enable/disable VGA gain
 assign GPIO_1_4 = ATTEN_EN; // enable/disable VGA attenuation
-assign GPIO_1_7 = (Ena_ST | cal_sel)? clk_cal : 1'b0;    // Modulate calibration signal if autocalibrating or self-testing. Changed from ST_EN on may23
+assign GPIO_1_7 = ST_pulse;  // Modulate self-test signal.
 
 wire ext_trigger = GPIO_1_0;	 
 
@@ -327,7 +328,7 @@ assign ADC_DD[13] = GPIO_0_15; //ADC_DD13
 	
 // clock generation
 	
-reg ST_on;	// This signal controls the input selector switch on the AFE. 
+//reg ST_on;	// This signal controls the input selector switch on the AFE. 
 	
 wire pll_locked; 
 wire SYS_RST = ~hps_fpga_reset_n;
@@ -773,13 +774,13 @@ wire ch_select = `CON_REG_L[2];
 assign ADC_clksel =  `CON_REG_L[3]; //select external clk or internal 20 Mhz clk
 wire waveform_select = `CON_REG_L[4]; // select 
 wire LPF_en = `CON_REG_L[5]; // enable output IIR 
-wire Ena_ST = `CON_REG_L[6];
+wire Ena_ST = `CON_REG_L[6]; // enable self-test signal
 wire auto_trig_sel = `CON_REG_L[7];
 
 wire ena_avg = `CON_REG_H[1]; //enable input FIR
 wire ena_gainctrl = `CON_REG_H[2]; // automatic gain control
-assign ATTEN_A0 = `CON_REG_H[3]; // autocalibration signal amplitude
-assign ATTEN_A1 = `CON_REG_H[4]; // autocalibration signal amplitude
+//assign ATTEN_A0 = `CON_REG_H[3]; // autocalibration signal amplitude
+//assign ATTEN_A1 = `CON_REG_H[4]; // autocalibration signal amplitude
 wire cal_sel = `CON_REG_H[5]; // choose calibration. 1 for autocal, 0 for manual
 wire ena_comb = `CON_REG_H[6]; // enable comb filter
 wire decimate = `CON_REG_H[7]; // enable comb filter
@@ -792,7 +793,7 @@ Self_Test Self_Test_inst(
 					.clk(SYS_CLK),
 					.Dcycle(`CAL_DC),
 					.trig(auto_trig), // mark the start of pulse.
-					.pulse(ST_EN) // 1126 Hz pulse
+					.pulse(ST_pulse) // 1126 Hz pulse
 					);
 
 //							================ CPU to FPGA Communication ===============
@@ -947,7 +948,7 @@ always@(posedge SYS_CLK)
 			
 end //else
 
-//							================ Self Trigger ===============					
+//	================ Self Trigger ===============					
 
 wire bpm_trig,gate,new_gate/* synthesis keep */; 
 wire No_beam;
@@ -968,7 +969,7 @@ self_trigger self_trigger_inst(
 );
 
 // ================ Processing ==============
-reg clk_cal; // 1kHz 50% duty
+
 parameter T_1s = 2500000; // # of clk cycles in 1 second
 parameter T_1ms = 25000; // # of clk cycles in 10 millisecond
 reg [21:0] count_10Hz; // count to 2.5 million
@@ -976,22 +977,19 @@ reg [21:0] count_10Hz; // count to 2.5 million
 reg flip_sign;
 reg dead_zone; // when this is HI, the signal is noisy from input switching.
 
-// generate 10Hz period pulse, and an extended version (ST_on) to account for calculate_position latency
-
-// Changed to a 1 Hz pulse on march 12
-// May 30 2024 - clk_cal is a 1kHz pulse with 50% duty, to switch crossbar switch
-// when clk_cal is HI, the inputs are swapped, and must be scaled by -1
+// June 26 2024 - VC1 and VC2 are 1kHz pulse with 50% duty, to switch crossbar switch
+// when VC1 is HI and VC2 is LO, the inputs are swapped, and must be scaled by -1. (based on the flip_sign signal)
 always @ (posedge DCLK) begin
 	
 	count_10Hz <= count_10Hz + 1;
 	if(count_10Hz == T_1ms)begin
-		count_10Hz <= 25'b0;	
+		count_10Hz <= 0;	
 	end
 	
 	if(cal_sel) begin
 		if(count_10Hz == T_1ms - 12575) begin // T_1s - 250000
-			clk_cal <= 1'b1;
-			ST_on <= 1'b1;
+			VC1 <= 1;
+			VC2 <= 0;
 			dead_zone <= 1;
 		end
 		else if(count_10Hz == T_1ms-12500) begin // T_1s - 25000
@@ -999,29 +997,23 @@ always @ (posedge DCLK) begin
 			dead_zone <= 0;
 		end
 		else if(count_10Hz == T_1ms-75) begin // T_1s - 25000
-			clk_cal <= 1'b0;
-			ST_on <= 1'b0;
+			VC1 <= 0;
+			VC2 <= 1;
 			dead_zone <= 1;
 		end
 		else if(count_10Hz == T_1ms) begin // T_1s - 25000
 			flip_sign <= 0; // ~20 us latency
 			dead_zone <= 0;
-		end
-		
-//		else if(count_10Hz == T_1ms)begin
-//			ST_on <= 1'b0;
-//		end		
+		end	
 	end
 	
-	else begin
-		ST_on <= 1'b0;
-		clk_cal <= 1'b0;
-		flip_sign <= 1'b0;
+	else begin // default state: channels not swapped
+		VC1 <= 0;
+		VC2 <= 1;
+		flip_sign <= 0;
 		dead_zone <= 0;
 	end
 end
-
-
 
 wire signed [DATA_WIDTH-1:0] Ch1_Din_FIR, Ch2_Din_FIR, Ch3_Din_FIR, Ch4_Din_FIR;
 wire [DATA_WIDTH-1:0] Ch1_Din/*synthesis keep*/;
@@ -1030,11 +1022,6 @@ wire [DATA_WIDTH-1:0] Ch3_Din/*synthesis keep*/;
 wire [DATA_WIDTH-1:0] Ch4_Din/*synthesis keep*/; 
 
 // ----------------------- Filter and store raw data ------------------------------
-//
-//assign Ch1_Din_FIR = Ch1_ADC_DATA <<< 2;
-//assign Ch2_Din_FIR = Ch2_ADC_DATA <<< 2;
-//assign Ch3_Din_FIR = Ch3_ADC_DATA <<< 2;
-//assign Ch4_Din_FIR = Ch4_ADC_DATA <<< 2;
 
 // Input FIR bandpass filters to clean up raw ADC data.
 FIR BPF1(
@@ -1123,7 +1110,6 @@ channel_block Ch_XY_inst(
  .fast_fifo_empty(fast_fifo_empty),
  
  .waveform_select(waveform_select),
- .flip_sign(flip_sign),
  //to fast fifo
  .fast_fifo_din(channel_dout),//64 bit
  .fast_fifo_wr(fifo_wr),
@@ -1192,7 +1178,6 @@ calculate_position cal_position_X(
    .IIR_OUT_K2(`IIR_OUT_K2),	
 	.dead_zone(dead_zone),
 	.decimate(decimate),
-	.clk_10Hz(clk_cal),
 	.flip_sign(flip_sign),
 	.A_comp(peak_A),
 	.B_comp(peak_B),
@@ -1219,7 +1204,6 @@ calculate_position cal_position_Y(
    .IIR_OUT_K2(`IIR_OUT_K2),	
 	.dead_zone(dead_zone),
 	.decimate(decimate),
-	.clk_10Hz(clk_cal),
 	.flip_sign(flip_sign),
 	.A_comp(peak_C),
 	.B_comp(peak_D),
@@ -1292,7 +1276,7 @@ calculate_position cal_position_Y(
 	always @(posedge SCLK)
 		new_gate_last <= new_gate;
 	
-	assign sfifo_trig = ((!new_gate) && new_gate_last) && (!dead_zone); // load sfifo when new_gate is falling, but not when calibrating. was !ST_ON
+	assign sfifo_trig = ((!new_gate) && new_gate_last) && (!dead_zone); // load sfifo when new_gate is falling, but not when the inputs are being switched.
 
 //data packet size is 8 words (32bit)
 
