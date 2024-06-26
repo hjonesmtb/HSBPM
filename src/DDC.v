@@ -19,6 +19,7 @@ module DDC(
 	
 	input clk,  //20 MHz 
 	input rst,
+	input flip_sign,
   	
 	output d_clk, //clk for decimated data
 	output clken, //for decimated data
@@ -32,6 +33,7 @@ module DDC(
 	 
 parameter FP_5000 = 32'H459c4000; 
 parameter FP_0002 = 32'h3951b717; // 1/5000
+parameter FP_neg0002 = 32'hb951b717; // -1/5000
 
 //-------------------------------------------------------------------------
 //Poor man's NCO: not good, position calculated drifts..., March 3,2023
@@ -145,6 +147,65 @@ CIC38 ch3_CIC_Q(
 			.d_in(ch3_data_Q),
 			.d_out(ch3_Qout),
 			.d_clk());
+			
+//wire signed [31:0] ch0_Icomp,ch1_Icomp,ch2_Icomp,ch3_Icomp/*synthesis keep*/;  
+//wire signed [31:0] ch0_Qcomp,ch1_Qcomp,ch2_Qcomp,ch3_Qcomp/*synthesis keep*/; 
+			
+//FIR_comp comp_0_I(
+//	.clk(d_clk), // 2.5 MHz
+//	.reset(rst),
+//	.data_in(ch0_Iout), // 32 bit CIC data
+//	.data_out(ch0_Icomp)
+//    );
+//	 
+//FIR_comp comp_0_Q(
+//	.clk(d_clk), // 2.5 MHz
+//	.reset(rst),
+//	.data_in(ch0_Qout), // 32 bit CIC data
+//	.data_out(ch0_Qcomp)
+//    );
+//	 
+//FIR_comp comp_1_I(
+//	.clk(d_clk), // 2.5 MHz
+//	.reset(rst),
+//	.data_in(ch1_Iout), // 32 bit CIC data
+//	.data_out(ch1_Icomp)
+//    );
+//	 
+//FIR_comp comp_1_Q(
+//	.clk(d_clk), // 2.5 MHz
+//	.reset(rst),
+//	.data_in(ch1_Qout), // 32 bit CIC data
+//	.data_out(ch1_Qcomp)
+//    );
+//	 
+//FIR_comp comp_2_I(
+//	.clk(d_clk), // 2.5 MHz
+//	.reset(rst),
+//	.data_in(ch2_Iout), // 32 bit CIC data
+//	.data_out(ch2_Icomp)
+//    );
+//	 
+//FIR_comp comp_2_Q(
+//	.clk(d_clk), // 2.5 MHz
+//	.reset(rst),
+//	.data_in(ch2_Qout), // 32 bit CIC data
+//	.data_out(ch2_Qcomp)
+//    );
+//	 
+//FIR_comp comp_3_I(
+//	.clk(d_clk), // 2.5 MHz
+//	.reset(rst),
+//	.data_in(ch3_Iout), // 32 bit CIC data
+//	.data_out(ch3_Icomp)
+//    );
+//	 
+//FIR_comp comp_3_Q(
+//	.clk(d_clk), // 2.5 MHz
+//	.reset(rst),
+//	.data_in(ch3_Qout), // 32 bit CIC data
+//	.data_out(ch3_Qcomp)
+//    );
 				
 reg [63:0] ch0_sqsum,ch1_sqsum,ch2_sqsum,ch3_sqsum/*synthesis keep*/;
 
@@ -234,7 +295,8 @@ assign fp_ch1_Amp = ena_comb? fp_ch1_comb : fp_ch1_scale;
 assign fp_ch2_Amp = ena_comb? fp_ch2_comb : fp_ch2_scale;
 assign fp_ch3_Amp = ena_comb? fp_ch3_comb : fp_ch3_scale;
 assign fp_ch4_Amp = ena_comb? fp_ch4_comb : fp_ch4_scale;
-	
+
+
 altfp_mul mul_inst0 (.dataa(fp_ch0), .datab(FP_0002), .clock(clk), .result(fp_ch1_scale) );
 altfp_mul mul_inst1 (.dataa(fp_ch1), .datab(FP_0002), .clock(clk), .result(fp_ch2_scale) );
 altfp_mul mul_inst2 (.dataa(fp_ch2), .datab(FP_0002), .clock(clk), .result(fp_ch3_scale) );

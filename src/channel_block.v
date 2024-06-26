@@ -25,7 +25,7 @@ module channel_block(
  input fast_fifo_empty,
  
  input waveform_select, 
-
+ input flip_sign,
 // input is10mmpV,
 // input [1:0] LPF_select,
 // input [1:0] AVG_select,
@@ -148,6 +148,7 @@ DDC DDC_inst(
 	
 	.clk(clk),  //ADC clk, ~ 20.xxxx MHz. 
 	.rst(SYS_RST),
+	.flip_sign(flip_sign),
 	
 	.d_clk(d_clk), //clk for output data
 	.clken(clken), //for output data

@@ -3,7 +3,7 @@
 module FIR(
 	input clk, // 20 MHz
 	input reset,
-	input ena_gain, // 1 for additional 4x gain
+	input flip_sign, // 1 to invert output (multiply by -1)
 	input wire signed [13:0] data_in, // 14 bit ADC data
 	output reg signed [15:0] data_out
     );
@@ -141,7 +141,7 @@ module FIR(
 			data_out = 0;
 		end
 		else begin 
-			data_out = ena_gain? (sum_buf >>> 13) : (sum_buf >>> 15); // = 4*(sum_buf >>> 15)
+			data_out = (sum_buf >>> 13); // = Gain of 4 or -4
 		end 
 	end
 

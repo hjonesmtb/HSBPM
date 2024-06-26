@@ -16,7 +16,7 @@
 //-----------------------------
 
 //parameter FPGA_VERSION_NO = 32'd0047; //verification
-parameter FPGA_VERSION_NO = 32'd20240530; // Modified on April 24, 2024
+parameter FPGA_VERSION_NO = 32'd20240604; // Modified on April 24, 2024
 
 module DE10_NANO_SoC_GHRD(
 
@@ -93,7 +93,7 @@ module DE10_NANO_SoC_GHRD(
 	 
 	 input GPIO_1_0,  // ext_trigger
 	 output GPIO_1_1, // ATTEN_A0 (for calibration source)
-	 output GPIO_1_2, // clk_10Hz (for calibration source) 
+	 output GPIO_1_2, // clk_cal (for calibration source) 
 	 output GPIO_1_3, // ATTEN_A1 (for calibration source) 
 
 	 output GPIO_1_4, // ATTEN_EN (VGA)               
@@ -246,10 +246,10 @@ wire ST_EN; // 1126 Hz duty cycle for calibration source
 
 assign GPIO_1_3 = ATTEN_A1; // enable/disable -20 dB attenuation of calibration signal
 assign GPIO_1_1 = ATTEN_A0; // enable/disable -10 dB attenuation of calibration signal
-assign GPIO_1_2 = Ena_ST? 1'b1 : clk_10Hz; // enable/disable calibration. Changed from ST_on on may23
+assign GPIO_1_2 = Ena_ST? 1'b1 : clk_cal; // Connected to AFE input switch. Changed from ST_on on may23
 assign GPIO_1_5 = GAIN_EN;  // enable/disable VGA gain
 assign GPIO_1_4 = ATTEN_EN; // enable/disable VGA attenuation
-assign GPIO_1_7 = (Ena_ST | cal_sel)? clk_10Hz : 1'b0;    // Modulate calibration signal if autocalibrating or self-testing. Changed from ST_EN on may23
+assign GPIO_1_7 = (Ena_ST | cal_sel)? clk_cal : 1'b0;    // Modulate calibration signal if autocalibrating or self-testing. Changed from ST_EN on may23
 
 wire ext_trigger = GPIO_1_0;	 
 
@@ -968,53 +968,79 @@ self_trigger self_trigger_inst(
 );
 
 // ================ Processing ==============
-reg clk_10Hz; // 1Hz pulse with 10% duty cycle (100ms width)
+reg clk_cal; // 1kHz 50% duty
 parameter T_1s = 2500000; // # of clk cycles in 1 second
+parameter T_1ms = 25000; // # of clk cycles in 10 millisecond
 reg [21:0] count_10Hz; // count to 2.5 million
+
+reg flip_sign;
+reg dead_zone; // when this is HI, the signal is noisy from input switching.
 
 // generate 10Hz period pulse, and an extended version (ST_on) to account for calculate_position latency
 
 // Changed to a 1 Hz pulse on march 12
+// May 30 2024 - clk_cal is a 1kHz pulse with 50% duty, to switch crossbar switch
+// when clk_cal is HI, the inputs are swapped, and must be scaled by -1
 always @ (posedge DCLK) begin
 	
 	count_10Hz <= count_10Hz + 1;
-	if(count_10Hz == T_1s)begin
+	if(count_10Hz == T_1ms)begin
 		count_10Hz <= 25'b0;	
 	end
 	
 	if(cal_sel) begin
-		if(count_10Hz == T_1s - 250000) begin
-			clk_10Hz <= 1'b1;
+		if(count_10Hz == T_1ms - 12575) begin // T_1s - 250000
+			clk_cal <= 1'b1;
 			ST_on <= 1'b1;
+			dead_zone <= 1;
 		end
-		else if(count_10Hz == T_1s - 25000) begin
-			clk_10Hz <= 1'b0;
+		else if(count_10Hz == T_1ms-12500) begin // T_1s - 25000
+			flip_sign <= 1; // ~20 us latency
+			dead_zone <= 0;
+		end
+		else if(count_10Hz == T_1ms-75) begin // T_1s - 25000
+			clk_cal <= 1'b0;
+			ST_on <= 1'b0;
+			dead_zone <= 1;
+		end
+		else if(count_10Hz == T_1ms) begin // T_1s - 25000
+			flip_sign <= 0; // ~20 us latency
+			dead_zone <= 0;
 		end
 		
-		else if(count_10Hz == T_1s)begin
-			ST_on <= 1'b0;
-		end		
+//		else if(count_10Hz == T_1ms)begin
+//			ST_on <= 1'b0;
+//		end		
 	end
 	
 	else begin
 		ST_on <= 1'b0;
-		clk_10Hz <= 1'b0;
+		clk_cal <= 1'b0;
+		flip_sign <= 1'b0;
+		dead_zone <= 0;
 	end
 end
 
-wire [DATA_WIDTH-1:0] Ch1_Din_FIR, Ch2_Din_FIR, Ch3_Din_FIR, Ch4_Din_FIR;
+
+
+wire signed [DATA_WIDTH-1:0] Ch1_Din_FIR, Ch2_Din_FIR, Ch3_Din_FIR, Ch4_Din_FIR;
 wire [DATA_WIDTH-1:0] Ch1_Din/*synthesis keep*/;
 wire [DATA_WIDTH-1:0] Ch2_Din/*synthesis keep*/; 
 wire [DATA_WIDTH-1:0] Ch3_Din/*synthesis keep*/; 
 wire [DATA_WIDTH-1:0] Ch4_Din/*synthesis keep*/; 
 
 // ----------------------- Filter and store raw data ------------------------------
+//
+//assign Ch1_Din_FIR = Ch1_ADC_DATA <<< 2;
+//assign Ch2_Din_FIR = Ch2_ADC_DATA <<< 2;
+//assign Ch3_Din_FIR = Ch3_ADC_DATA <<< 2;
+//assign Ch4_Din_FIR = Ch4_ADC_DATA <<< 2;
 
 // Input FIR bandpass filters to clean up raw ADC data.
 FIR BPF1(
     .clk(SCLK),
     .reset(SYS_RST),
-	 .ena_gain(1'b1), 
+	 .flip_sign(0), 
     .data_in(Ch1_ADC_DATA),
     .data_out(Ch1_Din_FIR)
     );
@@ -1022,7 +1048,7 @@ FIR BPF1(
 FIR BPF2(
     .clk(SCLK),
     .reset(SYS_RST),
-	 .ena_gain(1'b1),
+	 .flip_sign(0),
     .data_in(Ch2_ADC_DATA),
     .data_out(Ch2_Din_FIR)
     );	 
@@ -1030,7 +1056,7 @@ FIR BPF2(
 FIR BPF3(
     .clk(SCLK),
     .reset(SYS_RST),
-	 .ena_gain(1'b1), 
+	 .flip_sign(0), 
     .data_in(Ch3_ADC_DATA),
     .data_out(Ch3_Din_FIR)
     );
@@ -1038,7 +1064,7 @@ FIR BPF3(
 FIR BPF4(
     .clk(SCLK),
     .reset(SYS_RST),
-	 .ena_gain(1'b1), 
+	 .flip_sign(0), 
     .data_in(Ch4_ADC_DATA),
     .data_out(Ch4_Din_FIR)
     );	 
@@ -1097,7 +1123,7 @@ channel_block Ch_XY_inst(
  .fast_fifo_empty(fast_fifo_empty),
  
  .waveform_select(waveform_select),
- 
+ .flip_sign(flip_sign),
  //to fast fifo
  .fast_fifo_din(channel_dout),//64 bit
  .fast_fifo_wr(fifo_wr),
@@ -1164,9 +1190,10 @@ calculate_position cal_position_X(
 	.rst(maxmin_rst),
 	.gate(new_gate), //only calculate position inside this signal
    .IIR_OUT_K2(`IIR_OUT_K2),	
-	.cal_sel(cal_sel),
+	.dead_zone(dead_zone),
 	.decimate(decimate),
-	.clk_10Hz(clk_10Hz),
+	.clk_10Hz(clk_cal),
+	.flip_sign(flip_sign),
 	.A_comp(peak_A),
 	.B_comp(peak_B),
 	.A_max(max_A),
@@ -1174,7 +1201,7 @@ calculate_position cal_position_X(
 	.A_min(min_A),
 	.B_min(min_B),
 	.fp_pos_mm_LPF(X_fp_pos_uncal),
-	.fp_pos_mm_cal(X_fp_pos)
+	.fp_pos_slow(X_fp_pos)// decimated output
 	
     );
 	 
@@ -1190,9 +1217,10 @@ calculate_position cal_position_Y(
 	.rst(maxmin_rst),
 	.gate(new_gate), //only calculate position inside this signal
    .IIR_OUT_K2(`IIR_OUT_K2),	
-	.cal_sel(cal_sel),
+	.dead_zone(dead_zone),
 	.decimate(decimate),
-	.clk_10Hz(clk_10Hz),
+	.clk_10Hz(clk_cal),
+	.flip_sign(flip_sign),
 	.A_comp(peak_C),
 	.B_comp(peak_D),
 	.A_max(max_C),
@@ -1200,7 +1228,7 @@ calculate_position cal_position_Y(
 	.A_min(min_C),
 	.B_min(min_D),
 	.fp_pos_mm_LPF(),
-	.fp_pos_mm_cal(Y_fp_pos)
+	.fp_pos_slow(Y_fp_pos) // decimated output
 	
     );
 	 
@@ -1264,7 +1292,7 @@ calculate_position cal_position_Y(
 	always @(posedge SCLK)
 		new_gate_last <= new_gate;
 	
-	assign sfifo_trig = ((!new_gate) && new_gate_last) && (!ST_on); // load sfifo when new_gate is falling, but not when calibrating
+	assign sfifo_trig = ((!new_gate) && new_gate_last) && (!dead_zone); // load sfifo when new_gate is falling, but not when calibrating. was !ST_ON
 
 //data packet size is 8 words (32bit)
 

@@ -32,9 +32,10 @@ module calculate_position(
    	
 	//input [SF_WIDTH-1:0] K1, //
 	input [SF_WIDTH-1:0] IIR_OUT_K2, //LPF K2, fp
-	input cal_sel,
+	input dead_zone,
 	input decimate,
 	input clk_10Hz,
+	input flip_sign,
 	output [SF_WIDTH-1:0] A_comp,
 	output [SF_WIDTH-1:0] B_comp,
 	
@@ -44,7 +45,7 @@ module calculate_position(
 	output [SF_WIDTH-1:0] B_min,
 	
 	output [SF_WIDTH-1:0] fp_pos_mm_LPF,
-	output [SF_WIDTH-1:0] fp_pos_mm_cal // changed
+	output [SF_WIDTH-1:0] fp_pos_slow // changed
 	
     );
 	 
@@ -54,9 +55,9 @@ parameter SUM_WIDTH = 32;
 
 parameter fp1 = 32'H3f800000; //1
 parameter fp100 = 32'H42c80000; //100
+parameter fp_neg100 = 32'Hc2c80000; //-100
 parameter fpdot001 = 32'H3a83126f; //0.001
 parameter fpdot2 = 32'H3e4ccccd; // = 1/5 = 0.2
-
 
 reg [SF_WIDTH-1:0] A_in, B_in/*synthesis keep*/;
 wire [SF_WIDTH-1:0] fp_X_OFFSET, Kxy,delta, sigma;
@@ -67,72 +68,60 @@ wire [SF_WIDTH-1:0] sigma_div = sigma_zero? fp1 : sigma;
 reg [SF_WIDTH-1:0] A_scale,B_scale; // calibration values for each channel
 reg clk10_last;
 
-reg [SF_WIDTH-1:0] X_cal, X_cal_prev, X_cal_diff; // these signals are from the calibration input, not the signal from the beam
+reg [SF_WIDTH-1:0] X_cal, X_cal_prev, X_cal_diff, X_diff_acc, X_diff_acc_tmp; // these signals are from the calibration input, not the signal from the beam
 reg [SF_WIDTH-1:0] cal_pos_tmp; // the calibrated value, used to accumulate calibration error
 wire cal_zero;
+
+wire [SF_WIDTH-1:0] scale = flip_sign? fp_neg100 : fp100; // reverse sign when inputs are swapped
 
 always @ (posedge clk_fast) begin
 
 	B_scale <= FP_CH2_NF;
-			if (gate) begin 
+			if (gate && !dead_zone) begin 
 				A_in <= A_amp;
 				B_in <= B_amp; 
 				
-				cal_pos_tmp <= cal_zero? fp_pos_mm_LPF : fp_pos_mm_cal;
-				
-				// moved this block inside if to reduce noise
-				if(cal_sel) begin
-					clk10_last <= clk_10Hz;
-					X_cal_prev <= X_cal; // so the error isn;t double counted
-					if(!clk_10Hz && clk10_last) begin // the clk10 pulse needs to be longer than gate (4 ms max). It's currently 90 ms.
-						X_cal <= fp_pos_mm_LPF;
-					end
-				end
-				else begin
-					X_cal <= fp_pos_mm_LPF;
-					X_cal_prev <= fp_pos_mm_LPF;
-				end			
+//				// moved this block inside if to reduce noise
+//				if(cal_sel) begin
+//					clk10_last <= clk_10Hz;
+//					X_cal_prev <= X_cal; // so the error isn;t double counted
+//					X_diff_acc_tmp <= X_diff_acc;
+//					if(!clk_10Hz && clk10_last) begin // the clk10 pulse needs to be longer than gate (4 ms max). It's currently 90 ms.
+//						X_cal <= fp_pos_mm_LPF;
+//					end
+//				end
+//				else begin
+//					X_cal <= fp_pos_mm_LPF;
+//					X_cal_prev <= fp_pos_mm_LPF;
+//				end			
 			end	
 	end
 
 	
-altfp_sub sub_inst3 (.dataa(X_cal), .datab(X_cal_prev), .clock(clk), .result(X_cal_diff), .zero() ); // calibration
+//altfp_sub sub_inst3 (.dataa(X_cal), .datab(X_cal_prev), .clock(clk), .result(X_cal_diff), .zero() ); // calibration
+//altfp_add add_inst3(.dataa(X_diff_acc_tmp), .datab(X_cal_diff), .clock(clk), .result(X_diff_acc) );// Accumulated error. Assumed to be fluctuating near zero.
 
-// create integer signals
-wire [DATA_WIDTH-1:0] A_int_fast, A_int_slow, B_int_fast,B_int_slow;
+// create integer version of position
+wire signed [31:0] pos_slow, pos_fast;
 wire clk_slow;
+altfp_fp2int32 fp2int_inst1(.dataa(fp_pos_mm_LPF),.clock(clk_fast),.result(pos_fast));
 
-altfp_fp2int fp2int_inst1(.dataa(A_in),.clock(clk_fast),.result(A_int_fast), .overflow(), .nan());
-altfp_fp2int fp2int_inst2(.dataa(B_in),.clock(clk_fast),.result(B_int_fast), .overflow(), .nan());
-
-// decimate and filter integer signals
-CIC38 CIC_A(
+// decimate and filter integer position
+CIC38 CIC(
 			.clk(clk_fast),
 			.rst(rst),
-			.d_in(A_int_fast),
-			.d_out(A_int_slow),
+			.d_in(pos_fast),
+			.d_out(pos_slow),
 			.clk_en(),
 			.d_clk(clk_slow));
 			
-CIC38 CIC_B(
-			.clk(clk_fast),
-			.rst(rst),
-			.d_in(B_int_fast),
-			.d_out(B_int_slow),
-			.clk_en(),
-			.d_clk());
 
-// convert decimated signal back to float			
-wire [SF_WIDTH-1:0] A_fp_slow, B_fp_slow;
-
-altfp_16int2fp int2fpconv_inst1 (.dataa(A_int_slow), .clock(clk_slow), .result(A_fp_slow)); 
-altfp_16int2fp int2fpconv_inst2 (.dataa(B_int_slow), .clock(clk_slow), .result(B_fp_slow)); 
-
+altfp_32int2fp int2fpconv_inst1 (.dataa(pos_slow), .clock(clk_slow), .result(fp_pos_slow)); 
 wire [SF_WIDTH-1:0] A_fp, B_fp;
 wire clk;
 
-assign A_fp = decimate? A_fp_slow : A_in;
-assign B_fp = decimate? B_fp_slow : B_in;
+assign A_fp = A_in;
+assign B_fp = B_in;
 assign clk = decimate? clk_slow: clk_fast;
 
 	
@@ -163,7 +152,7 @@ altfp_add add_inst1 (.dataa(A_comp), .datab(B_comp), .clock(clk), .result(sigma)
 // division, 14 clks
 altfp_div3232 div_inst2 (.dataa(delta), . datab(sigma_div), .clock(clk), .result(C));   //C = (A-B)/(A+B). 14 clks
 
-altfp_mul mul_inst3 (.dataa(FP_KXY), .datab(fp100), .clock(clk), .result(Kxy) ); //  
+altfp_mul mul_inst3 (.dataa(FP_KXY), .datab(scale), .clock(clk), .result(Kxy) ); //  
 
 // scale. 7 clks
 altfp_mul mul_inst4 (.dataa(Kxy), .datab(C), .clock(clk), .result(D) ); //D is position value in mm   
@@ -193,7 +182,7 @@ LPF_IIR LPF_output_inst0(
 
 	 
 // calibrate. 7 clks
-altfp_sub sub_inst2 (.dataa(cal_pos_tmp), .datab(X_cal_diff), .clock(clk), .result(fp_pos_mm_cal), .zero(cal_zero)); // calibration
+//altfp_sub sub_inst2 (.dataa(fp_pos_mm_LPF), .datab(X_diff_acc), .clock(clk), .result(fp_pos_mm_cal), .zero(cal_zero)); // calibration
  
 endmodule
 
