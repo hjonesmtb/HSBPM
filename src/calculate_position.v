@@ -71,15 +71,28 @@ reg [SF_WIDTH-1:0] X_cal, X_cal_prev, X_cal_diff, X_diff_acc, X_diff_acc_tmp; //
 reg [SF_WIDTH-1:0] cal_pos_tmp; // the calibrated value, used to accumulate calibration error
 wire cal_zero;
 
-wire [SF_WIDTH-1:0] scale = flip_sign? fp_neg100 : fp100; // reverse sign when inputs are swapped
+reg [SF_WIDTH-1:0] scale;
 
+ = flip_sign? fp_neg100 : fp100; // reverse sign when inputs are swapped
+
+ 
 always @ (posedge clk_fast) begin
-
-	B_scale <= FP_CH2_NF;
-			if (gate && !dead_zone) begin 
-				A_in <= A_amp;
-				B_in <= B_amp; 	
-			end	
+	
+		if (gate && !dead_zone) begin 
+			A_scale <= fp1;
+			B_scale <= FP_CH2_NF;
+	
+			A_in <= A_amp;
+			B_in <= B_amp; 	
+		end	
+		
+		if(flip_sign) begin
+			scale <= fp_neg100; // reverse sign when inputs are swapped
+		end
+		else begin
+			scale <= fp100;
+		end
+		
 	end
 
 	
@@ -127,7 +140,7 @@ altfp_16int2fp int2fpconv_inst3 (.dataa(OFFSET), .clock(clk), .result(fp_X_OFFSE
 
 //compensate gain. 7 clks
 //assign A_comp = A_in;
-altfp_mul mul_inst1 (.dataa(A_fp), .datab(fp1), .clock(clk), .result(A_comp) ); // Multiply by 1 to avoid clock skew. This could be done by adding a 7 clk delay?
+altfp_mul mul_inst1 (.dataa(A_fp), .datab(A_scale), .clock(clk), .result(A_comp) ); // Multiply by 1 to avoid clock skew. This could be done by adding a 7 clk delay?
 altfp_mul mul_inst2 (.dataa(B_fp), .datab(B_scale), .clock(clk), .result(B_comp) ); // ajust gain. This could be done in fixed point.
 
 // delata sigma, 7 clks

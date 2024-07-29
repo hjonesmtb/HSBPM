@@ -16,7 +16,7 @@
 //-----------------------------
 
 //parameter FPGA_VERSION_NO = 32'd0047; //verification
-parameter FPGA_VERSION_NO = 32'd20240626; // Modified on April 24, 2024
+parameter FPGA_VERSION_NO = 32'd20240628; // Modified on April 24, 2024
 
 module DE10_NANO_SoC_GHRD(
 
@@ -250,7 +250,7 @@ assign GPIO_1_1 = VC1;
 assign GPIO_1_2 = Ena_ST; // Connected to AFE input selector to choose between external signal or self-test.
 assign GPIO_1_5 = GAIN_EN;  // enable/disable VGA gain
 assign GPIO_1_4 = ATTEN_EN; // enable/disable VGA attenuation
-assign GPIO_1_7 = ST_pulse;  // Modulate self-test signal.
+assign GPIO_1_7 = Ena_ST? ST_pulse : 0;  // Modulate self-test signal.
 
 wire ext_trigger = GPIO_1_0;	 
 
@@ -389,10 +389,17 @@ clk_control clkbuf_inst  //buf to GCLK network
 reg [ADC_DATA_WIDTH-1:0] Ch1_ADC_DATA,	Ch2_ADC_DATA,Ch3_ADC_DATA,	Ch4_ADC_DATA/*synthesis keep*/;
 // Sample 14 bit parallel ADC (AD9248-20). Data output format = two's compl.
 // ADC inputs are cross-swapped on ADC (Ch1 --> ADC input B, Ch2 --> ADC input A), so we must undo this.
+// when flip sign is high, the inputs are swapped by the crossbar switch, so we undo this.
 always @ (posedge ADC_CLK) 
 	begin 
+//		if(flip_sign) begin
+//			Ch1_ADC_DATA <= ADC_DA; Ch2_ADC_DATA <= ADC_DB; 
+//			Ch3_ADC_DATA <= ADC_DC; Ch4_ADC_DATA <= ADC_DD;		
+//		end
+
 		Ch1_ADC_DATA <= ADC_DB; Ch2_ADC_DATA <= ADC_DA; 
 		Ch3_ADC_DATA <= ADC_DD; Ch4_ADC_DATA <= ADC_DC;
+
 	end
 
 //							================ I2C EEPROM Interface ===============
@@ -556,7 +563,7 @@ parameter MANUAL_GAIN = 3;
 //
 //end
 
-always@(posedge new_gate) begin
+always@(posedge new_gate) begin // changed from posedge july25
 	
 	/*
 	HIGH GAIN RANGE: 0 - 30,000 
@@ -566,47 +573,47 @@ always@(posedge new_gate) begin
 	
 	GAIN_SETTING_Y <= `FP_CH4_NF;
 	
-	if(ena_gainctrl) begin
-		// HIGH range
-		if((GAIN_EN_AUTO & ~ATTEN_EN_AUTO) && (Amp_avg > 16'd30000)) begin
-			GAIN_SETTING_X <= `CH2_MED_GAIN;
-			GAIN_EN_AUTO <= 1'b0;
-			ATTEN_EN_AUTO <= 1'b0;
-			
-		end
-		// MED range
-		else if(~GAIN_EN_AUTO & ~ATTEN_EN_AUTO) begin
-			if(Amp_avg > 16'd30000) begin
-				GAIN_SETTING_X <= `CH2_LOW_GAIN;
-				GAIN_EN_AUTO <= 1'b0;
-				ATTEN_EN_AUTO <= 1'b1;
-			end
-			else if(Amp_avg < 16'd5000) begin // 3500 bits (~5 dBm) hysteresis from MED-HIGH transition
-				GAIN_SETTING_X <= `CH2_HIGH_GAIN;
-				GAIN_EN_AUTO <= 1'b1;
-				ATTEN_EN_AUTO <= 1'b0;
-			end
-		end
-		// LOW range
-		else if((~GAIN_EN_AUTO & ATTEN_EN_AUTO) && (Amp_avg < 16'd2000)) begin // ~1500 bits hysteresis from MED-LOW transition
-			GAIN_SETTING_X <= `CH2_MED_GAIN;
-			GAIN_EN_AUTO <= 1'b0;
-			ATTEN_EN_AUTO <= 1'b0;
-		end
+//	if(ena_gainctrl) begin
+//		// HIGH range
+//		if((GAIN_EN_AUTO & ~ATTEN_EN_AUTO) && (Amp_avg > 16'd30000)) begin
+//			GAIN_SETTING_X <= `CH2_MED_GAIN;
+//			GAIN_EN_AUTO <= 1'b0;
+//			ATTEN_EN_AUTO <= 1'b0;
+//			
+//		end
+//		// MED range
+//		else if(~GAIN_EN_AUTO & ~ATTEN_EN_AUTO) begin
+//			if(Amp_avg > 16'd30000) begin
+//				GAIN_SETTING_X <= `CH2_LOW_GAIN;
+//				GAIN_EN_AUTO <= 1'b0;
+//				ATTEN_EN_AUTO <= 1'b1;
+//			end
+//			else if(Amp_avg < 16'd5000) begin // 3500 bits (~5 dBm) hysteresis from MED-HIGH transition
+//				GAIN_SETTING_X <= `CH2_HIGH_GAIN;
+//				GAIN_EN_AUTO <= 1'b1;
+//				ATTEN_EN_AUTO <= 1'b0;
+//			end
+//		end
+//		// LOW range
+//		else if((~GAIN_EN_AUTO & ATTEN_EN_AUTO) && (Amp_avg < 16'd2000)) begin // ~1500 bits hysteresis from MED-LOW transition
+//			GAIN_SETTING_X <= `CH2_MED_GAIN;
+//			GAIN_EN_AUTO <= 1'b0;
+//			ATTEN_EN_AUTO <= 1'b0;
+//		end
+//	end
+//	
+	
+	if(GAIN_EN && ~ATTEN_EN) begin
+		GAIN_SETTING_X <= `CH2_HIGH_GAIN;
 	end
 	
-	else begin
-		if(GAIN_EN && ~ATTEN_EN) begin
-			GAIN_SETTING_X <= `CH2_HIGH_GAIN;
-		end
-		
-		else if(~GAIN_EN && ATTEN_EN) begin
-			GAIN_SETTING_X <= `CH2_LOW_GAIN;
-		end
-		else begin
-			GAIN_SETTING_X <= `CH2_MED_GAIN;
-		end
+	else if(~GAIN_EN && ATTEN_EN) begin
+		GAIN_SETTING_X <= `CH2_LOW_GAIN;
 	end
+	else begin
+		GAIN_SETTING_X <= `CH2_MED_GAIN;
+	end
+
 end
 
 
@@ -768,8 +775,8 @@ soc_system u0(
 //							================ Configuration Register ===============
 wire [15:0] status_reg = {channel_error[7:0],pll_locked,No_beam};
 
-assign GAIN_EN = ena_gainctrl? GAIN_EN_AUTO :`CON_REG_L[0];// CHANGE IN LABVIEW
-assign ATTEN_EN = ena_gainctrl? ATTEN_EN_AUTO :`CON_REG_L[1];// CHANGE IN LABVIEW
+assign GAIN_EN = `CON_REG_L[0];// Change for auto gain control
+assign ATTEN_EN =`CON_REG_L[1];// Change for auto gain control
 wire ch_select = `CON_REG_L[2];
 assign ADC_clksel =  `CON_REG_L[3]; //select external clk or internal 20 Mhz clk
 wire waveform_select = `CON_REG_L[4]; // select 
@@ -977,16 +984,30 @@ reg [21:0] count_10Hz; // count to 2.5 million
 reg flip_sign;
 reg dead_zone; // when this is HI, the signal is noisy from input switching.
 
-// June 26 2024 - VC1 and VC2 are 1kHz pulse with 50% duty, to switch crossbar switch
+// June 26 2024 - VC1 and VC2 are 100 Hz pulse with 50% duty, to switch crossbar switch
 // when VC1 is HI and VC2 is LO, the inputs are swapped, and must be scaled by -1. (based on the flip_sign signal)
 always @ (posedge DCLK) begin
 	
+	// this was commented last time.... July 25
 	count_10Hz <= count_10Hz + 1;
 	if(count_10Hz == T_1ms)begin
 		count_10Hz <= 0;	
 	end
-	
+//	
 	if(cal_sel) begin
+//		if(flip_sign) begin
+//			VC1 <= 0;
+//			VC2 <= 1;
+//			flip_sign <= 0;
+//		end
+//		
+//		else begin
+//			VC1 <= 1;
+//			VC2 <= 0;
+//			flip_sign <= 1;		
+//		end
+//		dead_zone <= 0;
+	
 		if(count_10Hz == T_1ms - 12575) begin // T_1s - 250000
 			VC1 <= 1;
 			VC2 <= 0;
@@ -1005,6 +1026,7 @@ always @ (posedge DCLK) begin
 			flip_sign <= 0; // ~20 us latency
 			dead_zone <= 0;
 		end	
+		
 	end
 	
 	else begin // default state: channels not swapped
@@ -1152,7 +1174,7 @@ alignment align_Y(
 
 wire [SF_WIDTH-1:0] peak_A,peak_B,peak_C,peak_D/*synthesis keep*/; // Slow FIFO values for demodulated envelopes
 wire [SF_WIDTH-1:0] X_fp_pos,Y_fp_pos/*synthesis keep*/; // slow FIFO values for beam position
-wire [SF_WIDTH-1:0] X_fp_pos_uncal; // uncalibrated beam position (no autocal)
+wire [SF_WIDTH-1:0] X_fp_pos_uncal, Y_fp_pos_uncal; // uncalibrated beam position (no autocal)
 wire [SF_WIDTH-1:0] max_A,max_B,min_A,min_B,max_C,max_D,min_C,min_D/*synthesis keep*/; 
 
 wire maxmin_rst; //for debug use, to clear the maxmin register
@@ -1211,7 +1233,7 @@ calculate_position cal_position_Y(
 	.B_max(max_D),
 	.A_min(min_C),
 	.B_min(min_D),
-	.fp_pos_mm_LPF(),
+	.fp_pos_mm_LPF(Y_fp_pos_uncal),
 	.fp_pos_slow(Y_fp_pos) // decimated output
 	
     );
@@ -1297,8 +1319,8 @@ calculate_position cal_position_Y(
 					3: begin sfifo_data_in <= peak_B; p_state <= 4; end			
 					4: begin sfifo_data_in <= peak_C; p_state <= 5; end
 					5: begin sfifo_data_in <= peak_D; p_state <= 6; end
-					6: begin sfifo_data_in <= X_fp_pos; p_state <= 7; end
-					7: begin sfifo_data_in <= Y_fp_pos; p_state <= 8; end
+					6: begin sfifo_data_in <= X_fp_pos_uncal; p_state <= 7; end
+					7: begin sfifo_data_in <= Y_fp_pos_uncal; p_state <= 8; end
 					8: begin sfifo_data_in <= X_fp_pos_uncal; p_state <= 9; end
 					9: begin sfifo_data_in <= {humi,temp}; p_state <= 10; end
 					10: begin sfifo_data_in <= max_A; p_state <= 11; end
