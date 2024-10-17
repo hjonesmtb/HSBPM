@@ -1,5 +1,3 @@
-/* Target Protect Project*/
-
 // function: Create a socket server. Dump the received message from the client and loopack the message to client.
 // usage: TPServer PortNum, PortNum is a interger larger than 2000.
 
@@ -12,8 +10,6 @@
 // Needs to use non-blocking accept or join methods to make it beautiful.
 // Another remained issue is: if the first connection access too often, the 2nd connection times out, it seems 
 // it could not assign fair bandwidth to both connections.
-
-// Nov 25 2023, HJ: modified for BPM server
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -41,6 +37,7 @@ void Load_Conf();
 
 void* VR_BASE;
 
+// Handle requests from client
 void *TCP_connection(void *void_newsockfd)
 {
  char cmdString[256];
@@ -59,22 +56,22 @@ void *TCP_connection(void *void_newsockfd)
             if ( n <= 0) {perror(" i am in com_proc, connection closed by client"); break; }
             else printf("loop=%d, Received message: %s, n=%d \n",loop++,cmdString,n);
             
-            sendTrue = cmd_proc(cmdString,&value, &string_back, &array_Ptr, &array_Dim);  	 /* process the command */
+            sendTrue = cmd_proc(cmdString,&value, &string_back, &array_Ptr, &array_Dim);// process command from client
               
             if (sendTrue != 0 ){
-		        if (sendTrue == 1){
+		        if (sendTrue == 1){ // regular query or write request
 			        sprintf(valueString,"%d\r\n",value);
 			        strLength = strlen(valueString);
 			        printf("value readback from FPGA = %d \n",value);
 			        if ( write(*newsockfd,valueString,strLength) < 0) //Send to client
 			            {perror("ERROR writing to client"); break; }
 		        }   
-		        if (sendTrue == 3){
+		        if (sendTrue == 3){ // reading from one of the FIFO buffers.
 			        arrayString[0]= '\0';
 			        for (array_Index=0; array_Index<array_Dim; array_Index++) {
 				        if(array_Index == array_Dim - 1)
 					        sprintf(valueString,"%d\r\n",*(array_Ptr +array_Index)); 
-					        //the termination chars changed from \n\r to \r\n, due to Labview TCP_read requires so, SL, 2018_0531
+					        //the termination chars changed from \n\r to \r\n, due to Labview TCP_read
 				        else  sprintf(valueString,"%d,",*(array_Ptr +array_Index));
 				        if ( (strLength = strlen(arrayString)) < (STRING_MAX_LENGTH - strlen(valueString)) )
 					        strcat(arrayString, valueString);
@@ -88,14 +85,11 @@ void *TCP_connection(void *void_newsockfd)
             }
             
             if ( write(*newsockfd,"0",1) < 0) //ack to client
-			   {perror("ERROR writing to client"); break; }
-            
+			   {perror("ERROR writing to client"); break; }        
   }       
 }
 
-
-
-
+// create socket for client to connect to, and begin TCP connection.
 int main(int argc, char* argv[])
 {
     if (argc < 2) {
@@ -104,7 +98,7 @@ int main(int argc, char* argv[])
          exit(1);
      }
      
-    // Mappming address of the FPGA registers/fifo to user space
+    // Mapping address of the FPGA registers/fifo to user space
   	
 	int fd;
 	
@@ -177,19 +171,15 @@ int main(int argc, char* argv[])
         if(pthread_join(TCP2_thread, NULL)) error_exit("Error joining thread\n");
         close(newsockfd2); 
         
-          
      } //waitting for connection request
- 
  
      if(pthread_join(TCP1_thread, NULL)) error_exit("Error joining thread\n");
      close(newsockfd1);
      
 close(sockfd);
 return 0; 
-
-     
-
 }
+
 //this is the awake bpm write format: 
  //com+' '+str(data)+'\r\n'   
 //Disable FIFO Interrupts

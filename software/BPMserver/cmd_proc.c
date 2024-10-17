@@ -2,9 +2,6 @@
  * cmd_proc.c  
  */
 
-//Oct.11,2018, SL: created for Target Protect DE10 Server
-// Nov 25 2023, HJ: modified for BPM server
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

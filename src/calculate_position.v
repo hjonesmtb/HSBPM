@@ -67,13 +67,9 @@ wire [SF_WIDTH-1:0] sigma_div = sigma_zero? fp1 : sigma;
 reg [SF_WIDTH-1:0] A_scale,B_scale; // calibration values for each channel
 reg clk10_last;
 
-reg [SF_WIDTH-1:0] X_cal, X_cal_prev, X_cal_diff, X_diff_acc, X_diff_acc_tmp; // these signals are from the calibration input, not the signal from the beam
-reg [SF_WIDTH-1:0] cal_pos_tmp; // the calibrated value, used to accumulate calibration error
-wire cal_zero;
+reg [SF_WIDTH-1:0] fp_pos_n, fp_pos_p, fp_pos_sum;
 
 reg [SF_WIDTH-1:0] scale;
-
- = flip_sign? fp_neg100 : fp100; // reverse sign when inputs are swapped
 
  
 always @ (posedge clk_fast) begin
@@ -86,18 +82,20 @@ always @ (posedge clk_fast) begin
 			B_in <= B_amp; 	
 		end	
 		
+		// reverse sign when inputs are swapped
+		// delay not accounted for. May cause glitching/noise.
 		if(flip_sign) begin
-			scale <= fp_neg100; // reverse sign when inputs are swapped
+			scale <= fp_neg100; 
+			fp_pos_n <= fp_pos_mm;
 		end
 		else begin
 			scale <= fp100;
+			fp_pos_p <= fp_pos_mm;
 		end
 		
 	end
 
-	
-//altfp_sub sub_inst3 (.dataa(X_cal), .datab(X_cal_prev), .clock(clk), .result(X_cal_diff), .zero() ); // calibration
-//altfp_add add_inst3(.dataa(X_diff_acc_tmp), .datab(X_cal_diff), .clock(clk), .result(X_diff_acc) );// Accumulated error. Assumed to be fluctuating near zero.
+
 
 // create integer version of position
 wire signed [31:0] pos_slow, pos_fast;
@@ -169,19 +167,18 @@ altfp_add add_inst2(.dataa(D), .datab(fpOFFSETmm), .clock(clk), .result(fp_pos_m
 // K2 = 0.999, Tc = [-1/ln(0.999)] * 400ns = 400 us; 0.4 KHz
 // K2 = 0.9995, Tc = [-1/ln(0.999)] * 400ns = 800 us; 0.2 KHz
 
+altfp_add add_inst3 (.dataa(fp_pos_n), .datab(fp_pos_p), .clock(clk), .result(fp_pos_sum), .zero() );// average switched values (need to div by 2 somewhere).
+
 // LPF. 22 clks
 LPF_IIR LPF_output_inst0( 
     .FCLK(clk),
     .in_valid(LPF_en), //
-	 .data_in(fp_pos_mm),
+	 .data_in(fp_pos_sum), //
 	 .K2(IIR_OUT_K2),
     .data_out(fp_pos_mm_LPF) //
     );
 
-	 
-// calibrate. 7 clks
-//altfp_sub sub_inst2 (.dataa(fp_pos_mm_LPF), .datab(X_diff_acc), .clock(clk), .result(fp_pos_mm_cal), .zero(cal_zero)); // calibration
- 
+
 endmodule
 
 		
