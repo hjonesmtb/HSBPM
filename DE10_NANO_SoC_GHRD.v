@@ -16,7 +16,7 @@
 //-----------------------------
 
 //parameter FPGA_VERSION_NO = 32'd0047; //verification
-parameter FPGA_VERSION_NO = 32'd20240628; // Modified on April 24, 2024
+parameter FPGA_VERSION_NO = 32'd20241030; // Modified on Oct 30, 2024
 
 module DE10_NANO_SoC_GHRD(
 
@@ -986,46 +986,46 @@ reg dead_zone; // when this is HI, the signal is noisy from input switching.
 
 // June 26 2024 - VC1 and VC2 are 100 Hz pulse with 50% duty, to switch crossbar switch
 // when VC1 is HI and VC2 is LO, the inputs are swapped, and must be scaled by -1. (based on the flip_sign signal)
-always @ (posedge DCLK) begin
+always @ (negedge new_gate) begin
 	
 	// this was commented last time.... July 25
-	count_10Hz <= count_10Hz + 1;
-	if(count_10Hz == T_1ms)begin
-		count_10Hz <= 0;	
-	end
-//	
-	if(cal_sel) begin
-//		if(flip_sign) begin
-//			VC1 <= 0;
-//			VC2 <= 1;
-//			flip_sign <= 0;
-//		end
-//		
-//		else begin
-//			VC1 <= 1;
-//			VC2 <= 0;
-//			flip_sign <= 1;		
-//		end
-//		dead_zone <= 0;
+//	count_10Hz <= count_10Hz + 1;
+//	if(count_10Hz == T_1ms)begin
+//		count_10Hz <= 0;	
+//	end
 	
-		if(count_10Hz == T_1ms - 12575) begin // T_1s - 250000
-			VC1 <= 1;
-			VC2 <= 0;
-			dead_zone <= 1;
-		end
-		else if(count_10Hz == T_1ms-12500) begin // T_1s - 25000
-			flip_sign <= 1; // ~20 us latency
-			dead_zone <= 0;
-		end
-		else if(count_10Hz == T_1ms-75) begin // T_1s - 25000
+	if(cal_sel) begin
+		if(flip_sign) begin
 			VC1 <= 0;
 			VC2 <= 1;
-			dead_zone <= 1;
+			flip_sign <= 0;
 		end
-		else if(count_10Hz == T_1ms) begin // T_1s - 25000
-			flip_sign <= 0; // ~20 us latency
-			dead_zone <= 0;
-		end	
+		
+		else begin
+			VC1 <= 1;
+			VC2 <= 0;
+			flip_sign <= 1;		
+		end
+		dead_zone <= 0;
+	
+//		if(count_10Hz == T_1ms - 12575) begin // T_1s - 250000
+//			VC1 <= 1;
+//			VC2 <= 0;
+//			dead_zone <= 1;
+//		end
+//		else if(count_10Hz == T_1ms-12500) begin // T_1s - 25000
+//			flip_sign <= 1; // ~20 us latency
+//			dead_zone <= 0;
+//		end
+//		else if(count_10Hz == T_1ms-75) begin // T_1s - 25000
+//			VC1 <= 0;
+//			VC2 <= 1;
+//			dead_zone <= 1;
+//		end
+//		else if(count_10Hz == T_1ms) begin // T_1s - 25000
+//			flip_sign <= 0; // ~20 us latency
+//			dead_zone <= 0;
+//		end	
 		
 	end
 	

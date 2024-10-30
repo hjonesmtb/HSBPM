@@ -80,19 +80,18 @@ always @ (posedge clk_fast) begin
 	
 			A_in <= A_amp;
 			B_in <= B_amp; 	
-		end	
-		
-		// reverse sign when inputs are swapped
-		// delay not accounted for. May cause glitching/noise.
-		if(flip_sign) begin
-			scale <= fp_neg100; 
-			fp_pos_n <= fp_pos_mm;
-		end
-		else begin
-			scale <= fp100;
-			fp_pos_p <= fp_pos_mm;
-		end
-		
+			
+			// reverse sign when inputs are swapped
+			// delay not accounted for. May cause glitching/noise.
+			if(flip_sign) begin
+				scale <= fp_neg100; 
+				// fp_pos_n <= fp_pos_mm;
+			end
+			else begin
+				scale <= fp100;
+				// fp_pos_p <= fp_pos_mm;
+			end
+		end			
 	end
 
 
@@ -167,13 +166,13 @@ altfp_add add_inst2(.dataa(D), .datab(fpOFFSETmm), .clock(clk), .result(fp_pos_m
 // K2 = 0.999, Tc = [-1/ln(0.999)] * 400ns = 400 us; 0.4 KHz
 // K2 = 0.9995, Tc = [-1/ln(0.999)] * 400ns = 800 us; 0.2 KHz
 
-altfp_add add_inst3 (.dataa(fp_pos_n), .datab(fp_pos_p), .clock(clk), .result(fp_pos_sum), .zero() );// average switched values (need to div by 2 somewhere).
+// altfp_add add_inst3 (.dataa(fp_pos_n), .datab(fp_pos_p), .clock(clk), .result(fp_pos_sum), .zero() );// average switched values (need to div by 2 somewhere).
 
 // LPF. 22 clks
 LPF_IIR LPF_output_inst0( 
     .FCLK(clk),
     .in_valid(LPF_en), //
-	 .data_in(fp_pos_sum), //
+	 .data_in(fp_pos_mm), //
 	 .K2(IIR_OUT_K2),
     .data_out(fp_pos_mm_LPF) //
     );
