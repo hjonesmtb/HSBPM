@@ -24,7 +24,7 @@ module channel_block(
  input fast_fifo_full,
  input fast_fifo_empty,
  
- input waveform_select,   
+ input waveform_select, 
  
  //to fast fifo
  output [FULL_WIDTH-1:0] fast_fifo_din,
@@ -58,8 +58,8 @@ wire of3, nan3;
 //use 18 bit to prevent saturation of amp_sum signal:
 //wire [DATA_WIDTH+1:0] Amp_sum  = ch0 + ch1 + ch2 + ch3 ;
 //assign Amp_avg = Amp_sum[DATA_WIDTH+1:2]; //divided by 4
-wire [DATA_WIDTH:0] Amp_sum  = ch0 + ch1; 
-assign Amp_avg = Amp_sum[DATA_WIDTH:1]; //divided by 2
+wire [DATA_WIDTH+1:0] Amp_sum  = ch0 + ch1 + ch2 + ch3; 
+assign Amp_avg = Amp_sum[DATA_WIDTH+1:2]; //divided by 4
 
 reg [SF_WIDTH-1:0] fp_ch1_delay [6:0];
 reg [SF_WIDTH-1:0] fp_ch2_delay [6:0];
@@ -68,6 +68,7 @@ reg [SF_WIDTH-1:0] fp_ch4_delay [6:0];
 
 integer i;
 // delay fp_chx_Amp signals by 6 clock cycles to keep in sync with Amp_avg
+// replace this with moving avg of 4x
 always @ (posedge DCLK)
     begin 
 		fp_ch1_delay[0] <= fp_ch1;
@@ -150,7 +151,6 @@ DDC DDC_inst(
 	.fp_ch3_Amp(fp_ch2_buf),
 	.fp_ch4_Amp(fp_ch3_buf)
     );
-
 
 	 //  1 clock
 always @ (posedge DCLK) 

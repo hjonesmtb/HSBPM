@@ -3,15 +3,9 @@
 // 
 // calcualte X, Y postion 
 // 
-// by: Shengli Liu, Diagnostics, TRIUMF
-// History: Created on March 1, 2021
-// Aug. 4,2021: changed the input of LPF to the value which is before converted to DAC value, hoping to 
-//    solve the overflow issue of the LPF.
-
-//	by: Yuhai Li, Diagnostics Coop Student, TRIUMF
-//	Jan. 18,2022: changed peak calculation algorithm to a signal energy calculation algorithm to improve
-//		algorithm response to very small and very large beam duty cycles.
-//
+// by: Holden Jones, Diagnostics, TRIUMF
+// History: Adapted from Shengli Liu 
+// 
 //////////////////////////////////////////////////////////////////////////////////
 
 // ~78 clk latency = 31 us
@@ -65,12 +59,7 @@ wire sigma_zero;
 wire [SF_WIDTH-1:0] sigma_div = sigma_zero? fp1 : sigma;
 
 reg [SF_WIDTH-1:0] A_scale,B_scale; // calibration values for each channel
-reg clk10_last;
-
-reg [SF_WIDTH-1:0] fp_pos_n, fp_pos_p, fp_pos_sum;
-
 reg [SF_WIDTH-1:0] scale;
-
  
 always @ (posedge clk_fast) begin
 	
@@ -85,16 +74,12 @@ always @ (posedge clk_fast) begin
 			// delay not accounted for. May cause glitching/noise.
 			if(flip_sign) begin
 				scale <= fp_neg100; 
-				// fp_pos_n <= fp_pos_mm;
 			end
 			else begin
 				scale <= fp100;
-				// fp_pos_p <= fp_pos_mm;
 			end
 		end			
 	end
-
-
 
 // create integer version of position
 wire signed [31:0] pos_slow, pos_fast;
@@ -132,6 +117,7 @@ Maxmin maxmin_inst(
    .min_B(B_min)
     );	
 
+wire [SF_WIDTH-1:0] A_sub, B_sub;
 
 altfp_16int2fp int2fpconv_inst3 (.dataa(OFFSET), .clock(clk), .result(fp_X_OFFSET)); // to floating point
 
@@ -165,8 +151,6 @@ altfp_add add_inst2(.dataa(D), .datab(fpOFFSETmm), .clock(clk), .result(fp_pos_m
 // K2 = 0.99, Tc = [-1/ln(0.995)] * 400ns = 40 us; Fc= 3.9 KHz
 // K2 = 0.999, Tc = [-1/ln(0.999)] * 400ns = 400 us; 0.4 KHz
 // K2 = 0.9995, Tc = [-1/ln(0.999)] * 400ns = 800 us; 0.2 KHz
-
-// altfp_add add_inst3 (.dataa(fp_pos_n), .datab(fp_pos_p), .clock(clk), .result(fp_pos_sum), .zero() );// average switched values (need to div by 2 somewhere).
 
 // LPF. 22 clks
 LPF_IIR LPF_output_inst0( 

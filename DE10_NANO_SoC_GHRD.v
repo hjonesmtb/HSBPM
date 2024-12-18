@@ -16,7 +16,7 @@
 //-----------------------------
 
 //parameter FPGA_VERSION_NO = 32'd0047; //verification
-parameter FPGA_VERSION_NO = 32'd20241030; // Modified on Oct 30, 2024
+parameter FPGA_VERSION_NO = 32'd20241202; // Modified on Nov 13, 2024
 
 module DE10_NANO_SoC_GHRD(
 
@@ -193,8 +193,8 @@ module DE10_NANO_SoC_GHRD(
 
 `define 	CH2_LOW_GAIN {configuration[3],configuration[2],configuration[1],configuration[0]}
 `define 	CH2_MED_GAIN {configuration[7],configuration[6],configuration[5],configuration[4]}
-`define 	CH2_HIGH_GAIN {configuration[11],configuration[10],configuration[9],configuration[8]}
-`define 	FP_CH4_NF {configuration[15],configuration[14],configuration[13],configuration[12]}
+`define 	CH4_LOW_GAIN {configuration[11],configuration[10],configuration[9],configuration[8]}
+`define 	CH4_MED_GAIN {configuration[15],configuration[14],configuration[13],configuration[12]}
 
 `define 	TRANSITION {configuration[17],configuration[16]}
 
@@ -211,7 +211,6 @@ module DE10_NANO_SoC_GHRD(
 `define 	MODULE_ID1  {configuration[33],configuration[32],configuration[31],configuration[30]} // Upper byte of ID
 `define 	MODULE_ID2  {configuration[37],configuration[36],configuration[35],configuration[34]} // Lower byte of ID
 `define 	MODULE_ID3  {configuration[41],configuration[40],configuration[39],configuration[38]} // not used
-`define 	MODULE_ID4  {configuration[45],configuration[44],configuration[43],configuration[42]} // not used
 
 `define 	IIR_OUT_K2 {configuration[49],configuration[48],configuration[47],configuration[46]} // Time constant for output LPF
 `define 	CAL_DC   configuration[50] // duty cycle of test pulse
@@ -242,13 +241,13 @@ assign stm_hw_events = {{15{1'b0}}, SW, fpga_led_internal, fpga_debounced_button
 // ========================= GPIO Pin Mapping ===============================
 reg VC1, VC2; // Crossbar switch control
 // wire ATTEN_A0, ATTEN_A1; // attenuation bits for calibration source
-wire GAIN_EN, ATTEN_EN; // gain, attenuation enable for VGA (+15 dB, -18 dB)
+wire ATTEN_EN; // gain, attenuation enable for VGA (+15 dB, -18 dB)
 wire ST_pulse; // 1126 Hz duty cycle for calibration source
 
 assign GPIO_1_3 = VC2; 
 assign GPIO_1_1 = VC1; 
 assign GPIO_1_2 = Ena_ST; // Connected to AFE input selector to choose between external signal or self-test.
-assign GPIO_1_5 = GAIN_EN;  // enable/disable VGA gain
+//assign GPIO_1_5 = GAIN_EN;  // enable/disable VGA gain
 assign GPIO_1_4 = ATTEN_EN; // enable/disable VGA attenuation
 assign GPIO_1_7 = Ena_ST? ST_pulse : 0;  // Modulate self-test signal.
 
@@ -425,193 +424,19 @@ wire rd_eeprom,wr_eeprom /*synthesis keep*/;
           .SDA(GPIO_0_30),
           .SCL(GPIO_0_31)               
                      );
-	
 
 reg [SF_WIDTH-1:0] GAIN_SETTING_X;
 reg [SF_WIDTH-1:0] GAIN_SETTING_Y;
 
-reg GAIN_EN_AUTO, ATTEN_EN_AUTO;
-reg [DATA_WIDTH-1:0] Amp_latched; // latched value of Amp_avg
-
-reg [2:0] gain_state;
-
-// these states are for automatic gain control
-parameter LOW_GAIN_STATE = 0;
-parameter MED_GAIN_STATE = 1;
-parameter HIGH_GAIN_STATE = 2;
-// this state is for manual gain control
-parameter MANUAL_GAIN = 3; 
-
-//always @(posedge new_gate)
-//begin
-//	if(SYS_RST)
-//		begin
-//			gain_state <= MANUAL_GAIN;
-////			// default to HIGH range
-////			GAIN_SETTING_X <= `CH2_HIGH_GAIN;
-////			GAIN_EN_AUTO <= 1;
-////			ATTEN_EN_AUTO <= 0;
-//		end
-//	else
-//		begin
-//	
-//			GAIN_SETTING_Y <= `FP_CH4_NF;
-//	
-//			case(gain_state)
-//				LOW_GAIN_STATE:
-//				begin
-//					
-//					if(!ena_gainctrl) begin
-//						gain_state <= MANUAL_GAIN;
-//					end
-//					
-//					else if(Amp_avg < 16'd2000) begin
-//						gain_state <= MED_GAIN_STATE;
-//						
-//						GAIN_SETTING_X <= `CH2_MED_GAIN;
-//						GAIN_EN_AUTO <= 1'b0;
-//						ATTEN_EN_AUTO <= 1'b0;	
-//					end
-//					else begin
-//						GAIN_SETTING_X <= `CH2_LOW_GAIN;
-//						GAIN_EN_AUTO <= 1'b0;
-//						ATTEN_EN_AUTO <= 1'b1;
-//					end
-//				end
-//				
-//				MED_GAIN_STATE: 
-//				begin
-//					
-//					if(!ena_gainctrl) begin
-//						gain_state <= MANUAL_GAIN;
-//					end
-//					
-//					else if(Amp_avg > 16'd30000) begin
-//						gain_state <= LOW_GAIN_STATE;
-//						
-//						GAIN_SETTING_X <= `CH2_LOW_GAIN;
-//						GAIN_EN_AUTO <= 1'b0;
-//						ATTEN_EN_AUTO <= 1'b1;
-//					end
-//					else if(Amp_avg < 16'd5000) begin 
-//						gain_state <= HIGH_GAIN_STATE;
-//						
-//						GAIN_SETTING_X <= `CH2_HIGH_GAIN;
-//						GAIN_EN_AUTO <= 1'b1;
-//						ATTEN_EN_AUTO <= 1'b0;
-//					end
-//					else begin
-//						GAIN_SETTING_X <= `CH2_MED_GAIN;
-//						GAIN_EN_AUTO <= 1'b0;
-//						ATTEN_EN_AUTO <= 1'b0;	
-//					end
-//				end
-//									
-//				HIGH_GAIN_STATE:
-//				begin
-//					
-//					if(!ena_gainctrl) begin
-//						gain_state <= MANUAL_GAIN;
-//					end
-//					
-//					else if(Amp_avg > 16'd30000) begin
-//						gain_state <= MED_GAIN_STATE;
-//						
-//						GAIN_SETTING_X <= `CH2_MED_GAIN;
-//						GAIN_EN_AUTO <= 1'b0;
-//						ATTEN_EN_AUTO <= 1'b0;	
-//					end
-//					
-//					else begin
-//						GAIN_SETTING_X <= `CH2_HIGH_GAIN;
-//						GAIN_EN_AUTO <= 1'b1;
-//						ATTEN_EN_AUTO <= 1'b0;
-//					end
-//				end
-//				// manually choose gain range using CON_REG_L[0:1] 
-//				// for this state, GAIN_EN and ATTEN_EN are driven wires
-//				MANUAL_GAIN: 
-//				begin	
-//					if (ena_gainctrl) begin
-//						gain_state <= HIGH_GAIN_STATE;
-//						
-//						GAIN_SETTING_X <= `CH2_HIGH_GAIN;
-//						GAIN_EN_AUTO <= 1'b1;
-//						ATTEN_EN_AUTO <= 1'b0;
-//					end
-//					
-//					else begin
-//						if(GAIN_EN && ~ATTEN_EN) begin
-//							GAIN_SETTING_X <= `CH2_HIGH_GAIN;
-//						end
-//						else if(~GAIN_EN && ATTEN_EN) begin
-//							GAIN_SETTING_X <= `CH2_LOW_GAIN;
-//						end
-//						else begin
-//							GAIN_SETTING_X <= `CH2_MED_GAIN;
-//						end
-//					end
-//				end
-//				
-//				default:
-//					begin 
-//						gain_state <= MANUAL_GAIN;
-//					end
-//					
-//			endcase
-//		end
-//
-//end
-
 always@(posedge new_gate) begin // changed from posedge july25
 	
-	/*
-	HIGH GAIN RANGE: 0 - 30,000 
-	MED GAIN RANGE : 5,000 - 25,000 
-	LOW GAIN RANGE : 4,000+ 
-	*/
-	
-	GAIN_SETTING_Y <= `FP_CH4_NF;
-	
-//	if(ena_gainctrl) begin
-//		// HIGH range
-//		if((GAIN_EN_AUTO & ~ATTEN_EN_AUTO) && (Amp_avg > 16'd30000)) begin
-//			GAIN_SETTING_X <= `CH2_MED_GAIN;
-//			GAIN_EN_AUTO <= 1'b0;
-//			ATTEN_EN_AUTO <= 1'b0;
-//			
-//		end
-//		// MED range
-//		else if(~GAIN_EN_AUTO & ~ATTEN_EN_AUTO) begin
-//			if(Amp_avg > 16'd30000) begin
-//				GAIN_SETTING_X <= `CH2_LOW_GAIN;
-//				GAIN_EN_AUTO <= 1'b0;
-//				ATTEN_EN_AUTO <= 1'b1;
-//			end
-//			else if(Amp_avg < 16'd5000) begin // 3500 bits (~5 dBm) hysteresis from MED-HIGH transition
-//				GAIN_SETTING_X <= `CH2_HIGH_GAIN;
-//				GAIN_EN_AUTO <= 1'b1;
-//				ATTEN_EN_AUTO <= 1'b0;
-//			end
-//		end
-//		// LOW range
-//		else if((~GAIN_EN_AUTO & ATTEN_EN_AUTO) && (Amp_avg < 16'd2000)) begin // ~1500 bits hysteresis from MED-LOW transition
-//			GAIN_SETTING_X <= `CH2_MED_GAIN;
-//			GAIN_EN_AUTO <= 1'b0;
-//			ATTEN_EN_AUTO <= 1'b0;
-//		end
-//	end
-//	
-	
-	if(GAIN_EN && ~ATTEN_EN) begin
-		GAIN_SETTING_X <= `CH2_HIGH_GAIN;
-	end
-	
-	else if(~GAIN_EN && ATTEN_EN) begin
+	if(ATTEN_EN) begin
 		GAIN_SETTING_X <= `CH2_LOW_GAIN;
+		GAIN_SETTING_Y <= `CH4_LOW_GAIN;
 	end
 	else begin
 		GAIN_SETTING_X <= `CH2_MED_GAIN;
+		GAIN_SETTING_Y <= `CH4_MED_GAIN;
 	end
 
 end
@@ -646,8 +471,8 @@ parameter integer 	EEPROM_WR_ADDR = 16;
 
 parameter integer 	CH2_LOW_GAIN_ADDR = 17;
 parameter integer 	CH2_MED_GAIN_ADDR = 18;
-parameter integer 	CH2_HIGH_GAIN_ADDR = 19;
-parameter integer 	FP_CH4_NF_ADDR = 20;
+parameter integer 	CH4_LOW_GAIN_ADDR = 19;
+parameter integer 	CH4_MED_GAIN_ADDR = 20;
 
 parameter integer 	FP_KXY_ADDR = 21;
 parameter integer 	X_OFFSET_ADDR = 22;
@@ -775,7 +600,7 @@ soc_system u0(
 //							================ Configuration Register ===============
 wire [15:0] status_reg = {channel_error[7:0],pll_locked,No_beam};
 
-assign GAIN_EN = `CON_REG_L[0];// Change for auto gain control
+//assign GAIN_EN = `CON_REG_L[0];// Change for auto gain control
 assign ATTEN_EN =`CON_REG_L[1];// Change for auto gain control
 wire ch_select = `CON_REG_L[2];
 assign ADC_clksel =  `CON_REG_L[3]; //select external clk or internal 20 Mhz clk
@@ -838,23 +663,19 @@ always@(posedge SYS_CLK)
 		
 	/*   Read from Control Register   */		
 	if ((avalon_addr == CR_ADDR) & (avalon_read_o == 1) ) 
-			dout <= {16'b0,`CON_REG_H,`CON_REG_L}; 
-	
+			dout <= {16'b0,`CON_REG_H,`CON_REG_L}; 	
 			
    /*   Read FPGA version   */		
 	if ((avalon_addr == FPGA_VER_ADDR) & (avalon_read_o == 1)) 
 			dout <= FPGA_VERSION_NO; 
-
-		
+	
 	/*   slow fifo occupancy     */		
 	if ((avalon_addr == SFIFO_WD_ADDR) & (avalon_read_o == 1)) 
 			begin comm_act <= ~comm_act; dout <= {16'b0,sfifo_wr_wd,sfifo_rd_wd}; end // HJ modified Nov 21,2023. Added sfifo_wr_wd.
 	
-
 	/*   Read slow fifo     */		
 	if ((avalon_addr == SFIFO_ADDR) & (avalon_read_o == 1)) 
 			dout <= sfifo_dout; 	
-	
 	
 	/*   Reset fast fifo     */		
 	if ((avalon_addr == FIFO_CLR_ADDR) & (avalon_write_o == 1)) 
@@ -899,17 +720,17 @@ always@(posedge SYS_CLK)
 	if ((avalon_addr == CH2_MED_GAIN_ADDR) & (avalon_read_o == 1) ) 
 			dout <= `CH2_MED_GAIN;
 			
-	/*   Write/Read to CH2_HIGH_GAIN  */
-	if ((avalon_addr == CH2_HIGH_GAIN_ADDR) & (avalon_write_o == 1) ) 
-			`CH2_HIGH_GAIN <= avalon_writedata; 
-	if ((avalon_addr == CH2_HIGH_GAIN_ADDR) & (avalon_read_o == 1) ) 
-			dout <= `CH2_HIGH_GAIN;
+	/*   Write/Read to CH4_LOW_GAIN  */
+	if ((avalon_addr == CH4_LOW_GAIN_ADDR) & (avalon_write_o == 1) ) 
+			`CH4_LOW_GAIN <= avalon_writedata; 
+	if ((avalon_addr == CH4_LOW_GAIN_ADDR) & (avalon_read_o == 1) ) 
+			dout <= `CH4_LOW_GAIN;
 			
-	/*   Write/Read to FP_CH4_NF  */
-	if ((avalon_addr == FP_CH4_NF_ADDR) & (avalon_write_o == 1) ) 
-			`FP_CH4_NF <= avalon_writedata; 
-	if ((avalon_addr == FP_CH4_NF_ADDR) & (avalon_read_o == 1) ) 
-			dout <= `FP_CH4_NF;			
+	/*   Write/Read to CH4_MED_GAIN  */
+	if ((avalon_addr == CH4_MED_GAIN_ADDR) & (avalon_write_o == 1) ) 
+			`CH4_MED_GAIN <= avalon_writedata; 
+	if ((avalon_addr == CH4_MED_GAIN_ADDR) & (avalon_read_o == 1) ) 
+			dout <= `CH4_MED_GAIN;			
 			
 	/*   Write/Read to FP_KXY  */
 	if ((avalon_addr == FP_KXY_ADDR) & (avalon_write_o == 1) ) 

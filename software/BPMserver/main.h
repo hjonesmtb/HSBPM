@@ -52,6 +52,8 @@
 
 #define CAL_WAVE_ADDR 4*33
 
+#define BL_ADDR 4*34
+
 #define IIR_OUT_K1_ADDR 4*47
 #define IIR_OUT_K2_ADDR 4*48
 
@@ -102,6 +104,8 @@
 #define TRANSITION (( (unsigned long) ALT_LWFPGASLVS_OFST + MYAVALONBUS32_0_BASE + TRANSITION_ADDR ) & (unsigned long) (HW_REGS_MASK))
 
 #define CAL_WAVE  (( (unsigned long) ALT_LWFPGASLVS_OFST + MYAVALONBUS32_0_BASE + CAL_WAVE_ADDR ) & (unsigned long) (HW_REGS_MASK))
+
+#define BL (( (unsigned long) ALT_LWFPGASLVS_OFST + MYAVALONBUS32_0_BASE + BL_ADDR ) & (unsigned long) (HW_REGS_MASK))
 
 #define IIR_OUT_K1  (( (unsigned long) ALT_LWFPGASLVS_OFST + MYAVALONBUS32_0_BASE + IIR_OUT_K1_ADDR ) & (unsigned long) (HW_REGS_MASK))
 #define IIR_OUT_K2  (( (unsigned long) ALT_LWFPGASLVS_OFST + MYAVALONBUS32_0_BASE + IIR_OUT_K2_ADDR ) & (unsigned long) (HW_REGS_MASK))

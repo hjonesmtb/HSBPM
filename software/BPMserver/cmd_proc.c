@@ -136,6 +136,9 @@ int cmd_proc(char *cmdString_in , int *value_back, char **string_back, int **arr
 		
 		if ( strcmp(cmd,"IIR_OUT_K1")== 0 ) {writeReg(VR_BASE+IIR_OUT_K1,invalue);return 0;}
 		if ( strcmp(cmd,"IIR_OUT_K1?")== 0 ) {*value_back = readReg(VR_BASE+IIR_OUT_K1);return 1;}
+
+		if ( strcmp(cmd,"BL")== 0 ) {writeReg(VR_BASE+BL,invalue);return 0;}
+		if ( strcmp(cmd,"BL?")== 0 ) {*value_back = readReg(VR_BASE+BL);return 1;}
 		
 		if ( strcmp(cmd,"IIR_OUT_K2")== 0 ) {writeReg(VR_BASE+IIR_OUT_K2,invalue);return 0;}
 		if ( strcmp(cmd,"IIR_OUT_K2?")== 0 ) {*value_back = readReg(VR_BASE+IIR_OUT_K2);return 1;}
