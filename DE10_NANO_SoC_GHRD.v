@@ -13,10 +13,11 @@
 // 
 
 // Apr 16 2024 - Updating Code for V4. Changed pinout for Temp sensor, EEPROM I2C, LO, and HPS_RESET.
+// Dec 18 2024 - Added gain of 4x to raw ADC data
 //-----------------------------
 
 //parameter FPGA_VERSION_NO = 32'd0047; //verification
-parameter FPGA_VERSION_NO = 32'd20241202; // Modified on Nov 13, 2024
+parameter FPGA_VERSION_NO = 32'd20250109; // Modified on Jan 2 2025
 
 module DE10_NANO_SoC_GHRD(
 
@@ -692,9 +693,9 @@ always@(posedge SYS_CLK)
 	
    /*   Write/Read to Thresh   */
 	if ((avalon_addr == TRIG_TH_ADDR) & (avalon_write_o == 1) ) 
-			`TRIG_TH <= avalon_writedata[15:0]; 
+			`TRIG_TH <= avalon_writedata[15:0]; // `TRIG_TH
 	if ((avalon_addr == TRIG_TH_ADDR) & (avalon_read_o == 1) ) 
-			dout <= {16'b0,`TRIG_TH};  
+			dout <= {16'b0,thresh_gen};  
 			
    /*   Write/Read to Transition  */
 	if ((avalon_addr == TRANSITION_ADDR) & (avalon_write_o == 1) ) 
@@ -783,10 +784,19 @@ wire No_beam;
 
 wire trig = auto_trig_sel? auto_trig : bpm_trig;
 
+wire [15:0] thresh_gen;
+set_threshold thresh_inst0(
+	.signal(Amp_avg),
+	
+	.clk(DCLK),
+	.threshold(thresh_gen)
+	
+);
+
 // Generated trigger signal based on demodulated envelope amplitude
 self_trigger self_trigger_inst(
 	.signal(Amp_avg), 
-	.threshold(`TRIG_TH),
+	.threshold(thresh_gen), // `TRIG_TH
 	.transition(`TRANSITION),	
 	.clk(DCLK), //SCLK
 	.reset(SYS_RST),
@@ -899,10 +909,14 @@ FIR BPF4(
     .data_out(Ch4_Din_FIR)
     );	 
 	 
-assign Ch1_Din = ena_avg? Ch1_Din_FIR: {Ch1_ADC_DATA[13],Ch1_ADC_DATA[13],Ch1_ADC_DATA};
-assign Ch2_Din = ena_avg? Ch2_Din_FIR: {Ch2_ADC_DATA[13],Ch2_ADC_DATA[13],Ch2_ADC_DATA};
-assign Ch3_Din = ena_avg? Ch3_Din_FIR: {Ch3_ADC_DATA[13],Ch3_ADC_DATA[13],Ch3_ADC_DATA};
-assign Ch4_Din = ena_avg? Ch4_Din_FIR: {Ch4_ADC_DATA[13],Ch4_ADC_DATA[13],Ch4_ADC_DATA};
+//assign Ch1_Din = ena_avg? Ch1_Din_FIR: {Ch1_ADC_DATA[13],Ch1_ADC_DATA[13],Ch1_ADC_DATA};
+//assign Ch2_Din = ena_avg? Ch2_Din_FIR: {Ch2_ADC_DATA[13],Ch2_ADC_DATA[13],Ch2_ADC_DATA};
+//assign Ch3_Din = ena_avg? Ch3_Din_FIR: {Ch3_ADC_DATA[13],Ch3_ADC_DATA[13],Ch3_ADC_DATA};
+//assign Ch4_Din = ena_avg? Ch4_Din_FIR: {Ch4_ADC_DATA[13],Ch4_ADC_DATA[13],Ch4_ADC_DATA};
+assign Ch1_Din = ena_avg? Ch1_Din_FIR: {Ch1_ADC_DATA, 1'b0, 1'b0};
+assign Ch2_Din = ena_avg? Ch2_Din_FIR: {Ch2_ADC_DATA, 1'b0, 1'b0};
+assign Ch3_Din = ena_avg? Ch3_Din_FIR: {Ch3_ADC_DATA, 1'b0, 1'b0};
+assign Ch4_Din = ena_avg? Ch4_Din_FIR: {Ch4_ADC_DATA, 1'b0, 1'b0};
 
 wire [FULL_WIDTH-1:0] channel_din = {Ch4_Din,Ch3_Din,Ch2_Din,Ch1_Din}; // 64 bit signal with raw data for all 4 channels.
 wire [FULL_WIDTH-1:0] channel_dout; // 64 bit signal with 4 channel data for fast FIFO. Can be raw data or demodulated data, depending on waveform_select.
@@ -1005,8 +1019,7 @@ pulse_shaper pulse_inst(
 	.clk(SYS_CLK),
 	.data_out(maxmin_rst)
     );
-
-// CHANGE FOR V3 - remove unused inputs from this module.	 
+ 
 calculate_position cal_position_X(
 	.A_amp(signal_delayed_X[31:0]), //
 	.B_amp(signal_delayed_X[63:32]),//
@@ -1059,6 +1072,7 @@ calculate_position cal_position_Y(
 	
     );
 	 
+
 //================ Fast FIFO to transfer 20 MHz data from FPGA to SoC ===================
 
 	wire fast_FIFO_rst = SYS_RST | fifo_clr_reg;

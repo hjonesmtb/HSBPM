@@ -5,7 +5,6 @@
 //	// by: Shengli Liu, Diagnostics, TRIUMF
 /*
  * Modification history:
- * Feb.18,2021: created based on project E_linac_RF_shield_upgrade: chanel_block.v
  * Apr 8 2024: added 6 clock cycle delay to fp_chx_Amp
  */
  

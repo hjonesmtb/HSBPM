@@ -9,8 +9,7 @@
 #include "main.h"
 
 #define BLOCK_SIZE 1024 //block transfer size for FAST FIFO
-#define PACKET_SIZE 28 //block transfer size for PACKET
-
+#define PACKET_SIZE 14 //block transfer size for PACKET
 
 static inline void writeReg(void* addr, uint32_t value)
 {
@@ -42,7 +41,8 @@ void Load_Conf()
 int cmd_proc(char *cmdString_in , int *value_back, char **string_back, int **array_Ptr, int *array_Dim)
 {
 	union Data xpos;
-	union Data chA;
+	union Data xpos_avg;
+	
 		
 	char cmd[50],*sdp,*chp;
 
@@ -103,17 +103,18 @@ int cmd_proc(char *cmdString_in , int *value_back, char **string_back, int **arr
 
 		if ( strcmp(cmd,"SFIFO:WD?")== 0 ) {*value_back = readReg(VR_BASE+SFIFO_WD);return 1;}
 		if ( strcmp(cmd,"SFIFO?")== 0 ) {
-    		for(cntr=0;cntr<PACKET_SIZE;cntr++){
-				if(cntr == 6) {
-					xpos.i = readReg(VR_BASE+SFIFO); // read X position into memory;
-					chA.i = dataArray[2];
-					//xpos.f = xpos.f + 0.00001*(chA.f);
-					dataArray[6] = xpos.i;					
+			xpos_avg.f = 0;
+			
+				for(cntr=0;cntr<PACKET_SIZE;cntr++){
+					if(cntr == 6) {
+						xpos.i = readReg(VR_BASE+SFIFO); // read X position into memory;	
+						dataArray[6] = xpos.i;	
+					}
+					else{
+						dataArray[cntr]= readReg(VR_BASE+SFIFO);	
+					}
 				}
-				else{
-					dataArray[cntr]= readReg(VR_BASE+SFIFO);	
-				}
-			}
+			
 			*array_Ptr = &dataArray[0]; *array_Dim = PACKET_SIZE;
     		return 3;}
 		

@@ -33,7 +33,7 @@ module DDC(
 parameter FP_5000 = 32'H459c4000; 
 parameter FP_0002 = 32'h3951b717; // 1/5000
 parameter FP_neg0002 = 32'hb951b717; // -1/5000
-
+parameter FP_100k = 32'h47c35000; //100,000
 //-------------------------------------------------------------------------
 //Poor man's NCO: not good, position calculated drifts..., March 3,2023
 //NCO: frequency to be Fs/4, see design note, Fs is chosen to make this OK.
@@ -208,8 +208,13 @@ CIC38 ch3_CIC_Q(
 				
 reg [63:0] ch0_sqsum,ch1_sqsum,ch2_sqsum,ch3_sqsum/*synthesis keep*/;
 
+wire [63:0] ch0_sqsum_avg,ch1_sqsum_avg,ch2_sqsum_avg,ch3_sqsum_avg/*synthesis keep*/;
+wire [63:0] ch0_sqsum_sel,ch1_sqsum_sel,ch2_sqsum_sel,ch3_sqsum_sel/*synthesis keep*/;
+
 wire [SF_WIDTH-1:0] fp_ch0_sqsum,fp_ch1_sqsum,fp_ch2_sqsum,fp_ch3_sqsum/*synthesis keep*/;
 wire [SF_WIDTH-1:0] fp_ch0_sqrt,fp_ch1_sqrt,fp_ch2_sqrt,fp_ch3_sqrt/*synthesis keep*/;
+wire [SF_WIDTH-1:0] fp_ch0_sqrt_sub,fp_ch1_sqrt_sub,fp_ch2_sqrt_sub,fp_ch3_sqrt_sub/*synthesis keep*/;
+wire [SF_WIDTH-1:0] fp_ch0_sqrt_tmp,fp_ch1_sqrt_tmp,fp_ch2_sqrt_tmp,fp_ch3_sqrt_tmp/*synthesis keep*/;
 
 wire overflow0, nan0/*synthesis keep*/;
 wire overflow1, nan1/*synthesis keep*/;
@@ -224,16 +229,56 @@ always @ (posedge clk)
 		ch3_sqsum <= ch3_Iout*ch3_Iout + ch3_Qout*ch3_Qout;
 	end
 
-altfp_64int2fp conv_inst0(.dataa(ch0_sqsum), .clock(clk), .result(fp_ch0_sqsum));
-altfp_64int2fp conv_inst1(.dataa(ch1_sqsum), .clock(clk), .result(fp_ch1_sqsum));
-altfp_64int2fp conv_inst2(.dataa(ch2_sqsum), .clock(clk), .result(fp_ch2_sqsum));
-altfp_64int2fp conv_inst3(.dataa(ch3_sqsum), .clock(clk), .result(fp_ch3_sqsum));
+boxfilter_4 bf_inst1(
+    .signal(ch0_sqsum),  // 16-bit input signal
+    .clk(d_clk),            // Clock signal
+    .avg(ch0_sqsum_avg)      // running 4 point average
+);
+
+boxfilter_4 bf_inst2(
+    .signal(ch1_sqsum),  // 16-bit input signal
+    .clk(d_clk),            // Clock signal
+    .avg(ch1_sqsum_avg)      // running 4 point average
+);
+
+boxfilter_4 bf_inst3(
+    .signal(ch2_sqsum),  // 16-bit input signal
+    .clk(d_clk),            // Clock signal
+    .avg(ch2_sqsum_avg)      // running 4 point average
+);
+
+boxfilter_4 bf_inst4(
+    .signal(ch3_sqsum),  // 16-bit input signal
+    .clk(d_clk),            // Clock signal
+    .avg(ch3_sqsum_avg)      // running 4 point average
+);
+
+assign ch0_sqsum_sel = ena_comb? ch0_sqsum_avg : ch0_sqsum;
+assign ch1_sqsum_sel = ena_comb? ch1_sqsum_avg : ch1_sqsum;
+assign ch2_sqsum_sel = ena_comb? ch2_sqsum_avg : ch2_sqsum;
+assign ch3_sqsum_sel = ena_comb? ch3_sqsum_avg : ch3_sqsum;
+
+altfp_64int2fp conv_inst0(.dataa(ch0_sqsum_sel), .clock(clk), .result(fp_ch0_sqsum));
+altfp_64int2fp conv_inst1(.dataa(ch1_sqsum_sel), .clock(clk), .result(fp_ch1_sqsum));
+altfp_64int2fp conv_inst2(.dataa(ch2_sqsum_sel), .clock(clk), .result(fp_ch2_sqsum));
+altfp_64int2fp conv_inst3(.dataa(ch3_sqsum_sel), .clock(clk), .result(fp_ch3_sqsum));
 
 altfp_sqrt sqrt_inst0(.data(fp_ch0_sqsum), .clock(clk), .result(fp_ch0_sqrt), .overflow(of0), .nan(nan0));
 altfp_sqrt sqrt_inst1(.data(fp_ch1_sqsum), .clock(clk), .result(fp_ch1_sqrt), .overflow(of1), .nan(nan1));
 altfp_sqrt sqrt_inst2(.data(fp_ch2_sqsum), .clock(clk), .result(fp_ch2_sqrt), .overflow(of2), .nan(nan2));
 altfp_sqrt sqrt_inst3(.data(fp_ch3_sqsum), .clock(clk), .result(fp_ch3_sqrt), .overflow(of3), .nan(nan3));
 
+//wire agb_0, agb_1, agb_2, agb_3;
+//// check if data > 100,000
+//altfp_comp comp_inst1 (.dataa(fp_ch0_sqrt_tmp), .datab(32'b0), .clock(clk), .agb(agb_0), .alb());
+//altfp_comp comp_inst2 (.dataa(fp_ch1_sqrt_tmp), .datab(32'b0), .clock(clk), .agb(agb_1), .alb());
+//altfp_comp comp_inst3 (.dataa(fp_ch2_sqrt_tmp), .datab(32'b0), .clock(clk), .agb(agb_2), .alb());
+//altfp_comp comp_inst4 (.dataa(fp_ch3_sqrt_tmp), .datab(32'b0), .clock(clk), .agb(agb_3), .alb());
+//
+//altfp_sub sub_inst1 (.dataa(fp_ch0_sqrt), .datab(FP_100k), .clock(clk), .result(fp_ch0_sqrt_tmp), .zero());
+//altfp_sub sub_inst2 (.dataa(fp_ch1_sqrt), .datab(FP_100k), .clock(clk), .result(fp_ch1_sqrt_tmp), .zero());
+//altfp_sub sub_inst3 (.dataa(fp_ch2_sqrt), .datab(FP_100k), .clock(clk), .result(fp_ch2_sqrt_tmp), .zero());
+//altfp_sub sub_inst4 (.dataa(fp_ch3_sqrt), .datab(FP_100k), .clock(clk), .result(fp_ch3_sqrt_tmp), .zero());
 
 assign error = {14'b0,of0|of1|of2|of3,nan0|nan1|nan2|nan3};
 
@@ -241,60 +286,76 @@ reg [SF_WIDTH-1:0] fp_ch0,fp_ch1,fp_ch2,fp_ch3/*synthesis keep*/;
 	
 always @ (posedge clk) 
 	begin
-	   fp_ch0 <= fp_ch0_sqrt; 
-		fp_ch1 <= fp_ch1_sqrt; 
-		fp_ch2 <= fp_ch2_sqrt; 
-		fp_ch3 <= fp_ch3_sqrt; 				
+//		fp_ch0_sqrt_sub <= fp_ch0_sqrt_tmp;
+//		fp_ch1_sqrt_sub <= fp_ch1_sqrt_tmp;
+//		fp_ch2_sqrt_sub <= fp_ch2_sqrt_tmp;
+//		fp_ch3_sqrt_sub <= fp_ch3_sqrt_tmp;
+//		
+//	   fp_ch0 <= agb_0? fp_ch0_sqrt_sub : 32'b0; 
+//		fp_ch1 <= agb_1? fp_ch1_sqrt_sub : 32'b0; 
+//		fp_ch2 <= agb_2? fp_ch2_sqrt_sub : 32'b0; 
+//		fp_ch3 <= agb_3? fp_ch3_sqrt_sub : 32'b0; 	
+		
+	   fp_ch0 <= fp_ch0_sqrt;
+		fp_ch1 <= fp_ch1_sqrt;
+		fp_ch2 <= fp_ch2_sqrt;
+		fp_ch3 <= fp_ch3_sqrt;	
+		
 	end
 
 wire [SF_WIDTH-1:0] fp_ch1_comb, fp_ch2_comb, fp_ch3_comb, fp_ch4_comb;
 wire [SF_WIDTH-1:0] fp_ch1_scale, fp_ch2_scale, fp_ch3_scale, fp_ch4_scale;
 	
-combfilter comb_inst1(
-    .clk(clk), // 20 MHz SCLK
-    .in_valid(in_valid),   // 1.153 MHz pulse. Pulse should be between 50 ns and 100ns wide.
-    .rst(),
-	 	 
-    .data_in(fp_ch0), //input data 
-    .data_out(fp_ch1_comb), //output data
-	 .overflow() //calculation overflow 
-	);
+//combfilter comb_inst1(
+//    .clk(clk), // 20 MHz SCLK
+//    .in_valid(in_valid),   // 1.153 MHz pulse. Pulse should be between 50 ns and 100ns wide.
+//    .rst(),
+//	 	 
+//    .data_in(fp_ch0), //input data 
+//    .data_out(fp_ch1_comb), //output data
+//	 .overflow() //calculation overflow 
+//	);
+//
+//combfilter comb_inst2(
+//    .clk(clk), // 20 MHz SCLK
+//    .in_valid(in_valid),   // 1.153 MHz pulse. Pulse should be between 50 ns and 100ns wide.
+//    .rst(),
+//	 	 
+//    .data_in(fp_ch1), //input data 
+//    .data_out(fp_ch2_comb), //output data
+//	 .overflow() //calculation overflow 
+//	);
+//	
+//combfilter comb_inst3(
+//    .clk(clk), // 20 MHz SCLK
+//    .in_valid(in_valid),   // 1.153 MHz pulse. Pulse should be between 50 ns and 100ns wide.
+//    .rst(),
+//	 	 
+//    .data_in(fp_ch2), //input data 
+//    .data_out(fp_ch3_comb), //output data
+//	 .overflow() //calculation overflow 
+//	);
+//	
+//combfilter comb_inst4(
+//    .clk(clk), // 20 MHz SCLK
+//    .in_valid(in_valid),   // 1.153 MHz pulse. Pulse should be between 50 ns and 100ns wide.
+//    .rst(),
+//	 	 
+//    .data_in(fp_ch3), //input data 
+//    .data_out(fp_ch4_comb), //output data
+//	 .overflow() //calculation overflow 
+//	);
+	
+//assign fp_ch1_Amp = ena_comb? fp_ch1_comb : fp_ch1_scale;
+//assign fp_ch2_Amp = ena_comb? fp_ch2_comb : fp_ch2_scale;
+//assign fp_ch3_Amp = ena_comb? fp_ch3_comb : fp_ch3_scale;
+//assign fp_ch4_Amp = ena_comb? fp_ch4_comb : fp_ch4_scale;
 
-combfilter comb_inst2(
-    .clk(clk), // 20 MHz SCLK
-    .in_valid(in_valid),   // 1.153 MHz pulse. Pulse should be between 50 ns and 100ns wide.
-    .rst(),
-	 	 
-    .data_in(fp_ch1), //input data 
-    .data_out(fp_ch2_comb), //output data
-	 .overflow() //calculation overflow 
-	);
-	
-combfilter comb_inst3(
-    .clk(clk), // 20 MHz SCLK
-    .in_valid(in_valid),   // 1.153 MHz pulse. Pulse should be between 50 ns and 100ns wide.
-    .rst(),
-	 	 
-    .data_in(fp_ch2), //input data 
-    .data_out(fp_ch3_comb), //output data
-	 .overflow() //calculation overflow 
-	);
-	
-combfilter comb_inst4(
-    .clk(clk), // 20 MHz SCLK
-    .in_valid(in_valid),   // 1.153 MHz pulse. Pulse should be between 50 ns and 100ns wide.
-    .rst(),
-	 	 
-    .data_in(fp_ch3), //input data 
-    .data_out(fp_ch4_comb), //output data
-	 .overflow() //calculation overflow 
-	);
-	
-assign fp_ch1_Amp = ena_comb? fp_ch1_comb : fp_ch1_scale;
-assign fp_ch2_Amp = ena_comb? fp_ch2_comb : fp_ch2_scale;
-assign fp_ch3_Amp = ena_comb? fp_ch3_comb : fp_ch3_scale;
-assign fp_ch4_Amp = ena_comb? fp_ch4_comb : fp_ch4_scale;
 
+assign fp_ch1_Amp = fp_ch1_scale;
+assign fp_ch2_Amp = fp_ch2_scale;
+assign fp_ch3_Amp = fp_ch3_scale;
+assign fp_ch4_Amp = fp_ch4_scale;
 
 altfp_mul mul_inst0 (.dataa(fp_ch0), .datab(FP_0002), .clock(clk), .result(fp_ch1_scale) );
 altfp_mul mul_inst1 (.dataa(fp_ch1), .datab(FP_0002), .clock(clk), .result(fp_ch2_scale) );

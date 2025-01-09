@@ -84,7 +84,7 @@ always @ (posedge clk_fast) begin
 // create integer version of position
 wire signed [31:0] pos_slow, pos_fast;
 wire clk_slow;
-altfp_fp2int32 fp2int_inst1(.dataa(fp_pos_mm_LPF),.clock(clk_fast),.result(pos_fast));
+altfp_fp2int32 fp2int_inst1(.dataa(fp_pos_mm_LPF),.clock(clk_fast), .result(pos_fast));
 
 // decimate and filter integer position
 CIC38 CIC(
