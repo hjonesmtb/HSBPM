@@ -1041,8 +1041,8 @@ calculate_position cal_position_X(
 	.B_max(max_B),
 	.A_min(min_A),
 	.B_min(min_B),
-	.fp_pos_mm_LPF(X_fp_pos_uncal),
-	.fp_pos_slow(X_fp_pos)// decimated output
+	.fp_pos_mm_LPF(X_fp_pos_uncal), //X_fp_pos_uncal
+	.fp_pos_slow(X_fp_pos)// decimated output - X_fp_pos
 	
     );
 	 
@@ -1067,9 +1067,9 @@ calculate_position cal_position_Y(
 	.B_max(max_D),
 	.A_min(min_C),
 	.B_min(min_D),
-	.fp_pos_mm_LPF(Y_fp_pos_uncal),
-	.fp_pos_slow(Y_fp_pos) // decimated output
-	
+	.fp_pos_mm_LPF(Y_fp_pos_uncal), //Y_fp_pos_uncal
+	.fp_pos_slow(Y_fp_pos) // decimated output - Y_fp_pos 
+	 
     );
 	 
 
