@@ -25,6 +25,13 @@ static inline uint32_t readReg(void* addr)
     return *(uint32_t*) (addr);
 }
 
+float correction (float x, float y){
+	float a = 0.994 ;
+	float c = 0.000258;
+	
+	return a + c*(x^2 + y^2);
+	
+}
 
 
 union Data {
@@ -44,8 +51,8 @@ void Load_Conf()
 int cmd_proc(char *cmdString_in , int *value_back, char **string_back, int **array_Ptr, int *array_Dim)
 {
 	union Data xpos;
-	union Data xpos_avg;
-	
+	union Data ypos;
+	float corr;
 		
 	char cmd[50],*sdp,*chp;
 
@@ -106,17 +113,27 @@ int cmd_proc(char *cmdString_in , int *value_back, char **string_back, int **arr
 
 		if ( strcmp(cmd,"SFIFO:WD?")== 0 ) {*value_back = readReg(VR_BASE+SFIFO_WD);return 1;}
 		if ( strcmp(cmd,"SFIFO?")== 0 ) {
-			xpos_avg.f = 0;
 			
 				for(cntr=0;cntr<PACKET_SIZE;cntr++){
 					if(cntr == 6) {
 						xpos.i = readReg(VR_BASE+SFIFO); // read X position into memory;	
-						dataArray[6] = xpos.i;	
 					}
+					else if(cntr == 7) {
+							ypos.i = readReg(VR_BASE+SFIFO); // read Y position into memory;	
+						}
+
+
 					else{
 						dataArray[cntr]= readReg(VR_BASE+SFIFO);	
 					}
 				}
+			// apply corrections to X and Y positions
+			corr = correction(xpos.f,ypos.f); //corr ~ (1 + c*r^2)
+			xpos.f = xpos.f*corr;
+			ypos.f = ypos.f*corr;
+				
+			dataArray[6] = xpos.i;	
+			dataArray[7] = ypos.i;	
 			
 			*array_Ptr = &dataArray[0]; *array_Dim = PACKET_SIZE;
     		return 3;}
