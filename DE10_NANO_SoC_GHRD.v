@@ -17,7 +17,7 @@
 //-----------------------------
 
 //parameter FPGA_VERSION_NO = 32'd0047; //verification
-parameter FPGA_VERSION_NO = 32'd20250109; // Modified on Jan 2 2025
+parameter FPGA_VERSION_NO = 32'd20250314; // Modified on Jan 2 2025
 
 module DE10_NANO_SoC_GHRD(
 
