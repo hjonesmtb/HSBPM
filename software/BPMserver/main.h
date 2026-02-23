@@ -11,7 +11,8 @@
 #include "socal/alt_gpio.h"
 #include "hps_0.h"
 
-#define FW_VERSION 20230301 //firmware version 
+//#define FW_VERSION 20230301 //firmware version 
+#define FW_VERSION 20260217 //firmware version 
 
 #define BUFFER_MAX_SIZE 4000
 #define STRING_MAX_LENGTH 36864
@@ -57,11 +58,9 @@
 #define IIR_OUT_K1_ADDR 4*47
 #define IIR_OUT_K2_ADDR 4*48
 
-//#define CH1_DAC_PEAK_OFFSET_ADDR 4*49
-//#define CH1_DAC_AVG_OFFSET_ADDR 4*50
 
-#define CH2_DAC_PEAK_OFFSET_ADDR 4*51
-#define CH2_DAC_AVG_OFFSET_ADDR 4*52
+
+#define CLEAR_TRIP_ADDR 4*51
 
 #define CH1_ADL5513_OFFSET_ADDR 4*53
 #define CH2_ADL5513_OFFSET_ADDR 4*54
@@ -113,8 +112,7 @@
 #define MODULE_ID0  (( (unsigned long) ALT_LWFPGASLVS_OFST + MYAVALONBUS32_0_BASE + MODULE_ID0_ADDR ) & (unsigned long) (HW_REGS_MASK))
 #define MODULE_ID1  (( (unsigned long) ALT_LWFPGASLVS_OFST + MYAVALONBUS32_0_BASE + MODULE_ID1_ADDR ) & (unsigned long) (HW_REGS_MASK))
 
-//#define CH0_ADC_OFFSET  (( (unsigned long) ALT_LWFPGASLVS_OFST + MYAVALONBUS32_0_BASE + CH0_ADC_OFFSET_ADDR ) & (unsigned long) (HW_REGS_MASK)) // HJ (Nov 27, 2023)
-//#define CH1_ADC_OFFSET  (( (unsigned long) ALT_LWFPGASLVS_OFST + MYAVALONBUS32_0_BASE + CH1_ADC_OFFSET_ADDR ) & (unsigned long) (HW_REGS_MASK)) // HJ (Nov 27, 2023)
+#define CLEAR_TRIP  (( (unsigned long) ALT_LWFPGASLVS_OFST + MYAVALONBUS32_0_BASE + CLEAR_TRIP_ADDR ) & (unsigned long) (HW_REGS_MASK)) 
 
 #define COMB_ALPHA_OFFSET  (( (unsigned long) ALT_LWFPGASLVS_OFST + MYAVALONBUS32_0_BASE + COMB_ALPHA_ADDR ) & (unsigned long) (HW_REGS_MASK)) // Apr 9 2024
 

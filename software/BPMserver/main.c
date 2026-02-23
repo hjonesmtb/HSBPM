@@ -54,7 +54,7 @@ void *TCP_connection(void *void_newsockfd)
             bzero(cmdString,256);
             n=read(*newsockfd,cmdString,255);
             if ( n <= 0) {perror(" i am in com_proc, connection closed by client"); break; }
-            else printf("loop=%d, Received message: %s, n=%d \n",loop++,cmdString,n);
+            //else printf("loop=%d, Received message: %s, n=%d \n",loop++,cmdString,n);
             
             sendTrue = cmd_proc(cmdString,&value, &string_back, &array_Ptr, &array_Dim);// process command from client
               
@@ -62,7 +62,7 @@ void *TCP_connection(void *void_newsockfd)
 		        if (sendTrue == 1){ // regular query or write request
 			        sprintf(valueString,"%d\r\n",value);
 			        strLength = strlen(valueString);
-			        printf("value readback from FPGA = %d \n",value);
+			        //printf("value readback from FPGA = %d \n",value);
 			        if ( write(*newsockfd,valueString,strLength) < 0) //Send to client
 			            {perror("ERROR writing to client"); break; }
 		        }   
@@ -75,12 +75,12 @@ void *TCP_connection(void *void_newsockfd)
 				        else  sprintf(valueString,"%d,",*(array_Ptr +array_Index));
 				        if ( (strLength = strlen(arrayString)) < (STRING_MAX_LENGTH - strlen(valueString)) )
 					        strcat(arrayString, valueString);
-				        else printf("Main.c: data is too long for the output string \n\r");
+				        //else printf("Main.c: data is too long for the output string \n\r");
 			        }
 			        strLength = strlen(arrayString);
     			    if (write(*newsockfd, arrayString, strLength) < 0)	
 				        {perror("ERROR writing to client"); break; }
-				    else printf("FIFO transfer successfully string length = %d \n\r",strLength);    
+				    //else printf("FIFO transfer successfully string length = %d \n\r",strLength);    
 			    }
             }
             
@@ -146,23 +146,23 @@ int main(int argc, char* argv[])
 	 pthread_t TCP1_thread,TCP2_thread;  
 	 
 		 
-	 printf("Accepting for connection request...\n");    
+	 //printf("Accepting for connection request...\n");    
      newsockfd1 = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen); //blocking until received a connection request
      if (newsockfd1 < 0) error_exit("ERROR on accept");
      
       
-     printf("TCP Socket XTpage Connection Established!\n"); 
+     //printf("TCP Socket XTpage Connection Established!\n"); 
         
         /* create a TCP thread  */
      if(pthread_create(&TCP1_thread, NULL, TCP_connection, &newsockfd1)) error_exit("Error creating thread 1\n");
        
      while(1) {
    
-        printf("Accepting for Labview connection request...\n");    
+        //printf("Accepting for Labview connection request...\n");    
         newsockfd2 = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen); //blocking until received a connection request
         if (newsockfd2 < 0) error_exit("ERROR on accept");
         
-        printf("TCP Socket Labview Connection Established!\n");     
+        //printf("TCP Socket Labview Connection Established!\n");     
  
         if(pthread_create(&TCP2_thread, NULL, TCP_connection, &newsockfd2)) error_exit("Error creating thread 2\n");
            

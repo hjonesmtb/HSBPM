@@ -30,6 +30,7 @@ module calculate_position #(parameter SF_WIDTH = 32, parameter DATA_WIDTH = 16)
 	input dead_zone,
 	input decimate,
 	input flip_sign,
+	output clk_slow2,
 	output [SF_WIDTH-1:0] A_comp,
 	output [SF_WIDTH-1:0] B_comp,
 	
@@ -38,7 +39,7 @@ module calculate_position #(parameter SF_WIDTH = 32, parameter DATA_WIDTH = 16)
 	output [SF_WIDTH-1:0] A_min,
 	output [SF_WIDTH-1:0] B_min,
 	
-	output [SF_WIDTH-1:0] fp_pos_mm_LPF,
+	output [SF_WIDTH-1:0] fp_pos_um_LPF,
 	output [SF_WIDTH-1:0] fp_pos_slow // changed
 	
     );
@@ -55,7 +56,7 @@ parameter fpdot2 = 32'H3e4ccccd; // = 1/5 = 0.2
 
 reg [SF_WIDTH-1:0] A_in, B_in/*synthesis keep*/;
 wire [SF_WIDTH-1:0] fp_X_OFFSET, Kxy,delta, sigma;
-wire [SF_WIDTH-1:0] A,B,C,D,fpOFFSETmm,fp_pos_dac,fp_pos_mm/*synthesis keep*/;
+wire [SF_WIDTH-1:0] A,B,C,D,fpOFFSETmm,fp_pos_dac,fp_pos_um/*synthesis keep*/;
 wire sigma_zero;
 wire [SF_WIDTH-1:0] sigma_div = sigma_zero? fp1 : sigma;
 
@@ -83,33 +84,58 @@ always @ (posedge clk_fast) begin
 	end
 
 // create integer version of position
-wire signed [31:0] pos_slow, pos_fast;
-wire clk_slow;
-altfp_fp2int32 fp2int_inst1(.dataa(fp_pos_mm_LPF),.clock(clk_fast),.result(pos_fast));
+wire signed [31:0] pos_slow1, pos_slow2, pos_fast;
+wire clk_slow1;
+altfp_fp2int32 fp2int_inst1(.dataa(fp_pos_um_LPF),.clock(clk_fast),.result(pos_fast));
 
 // decimate and filter integer position
-CIC38 CIC(
-			.clk(clk_fast),
-			.rst(rst),
-			.d_in(pos_fast),
-			.d_out(pos_slow),
-			.clk_en(),
-			.d_clk(clk_slow));
+//CIC38 CIC(
+//			.clk(clk_fast),
+//			.rst(rst),
+//			.d_in(pos_fast),
+//			.d_out(pos_slow),
+//			.clk_en(),
+//			.d_clk(clk_slow));
+//			
 			
+			
+CIC #(
+  .width(47) // 32 bits + 15 bits of growth
+) cic_1 (
+  .clk(clk_fast),
+  .rst(0),
+  .decimation_ratio(8),
+  .d_in(pos_fast),
+  .d_out(pos_slow1),
+  .d_clk(clk_slow1)
+);
 
-altfp_32int2fp int2fpconv_inst1 (.dataa(pos_slow), .clock(clk_slow), .result(fp_pos_slow)); 
+CIC #(
+  .width(47) // 32 bits + 15 bits of growth
+) cic_2 (
+  .clk(clk_slow1),
+  .rst(0),
+  .decimation_ratio(8),
+  .d_in(pos_slow1),
+  .d_out(pos_slow2),
+  .d_clk(clk_slow2)
+);
+
+// replace this with CIC from Halo. Reduce from 2.5 MHz --> 50 kHz (50x decimation with 5x, 10x)
+// load this into a 128 word RAM in the main block.
+
+// 51 kHz (2.5 MHz decimated by 49)
+altfp_32int2fp int2fpconv_inst1 (.dataa(pos_slow2), .clock(clk_slow2), .result(fp_pos_slow)); 
 wire [SF_WIDTH-1:0] A_fp, B_fp;
-wire clk;
+//wire clk = decimate? clk_slow: clk_fast;
 
 assign A_fp = A_in;
 assign B_fp = B_in;
-assign clk = decimate? clk_slow: clk_fast;
-
-	
+ 
 Maxmin maxmin_inst(
 	.din_a(A_fp),
 	.din_b(B_fp),
-	.clk(clk),
+	.clk(clk_fast),
 	.rst(rst),
 	
 	.max_A(A_max),
@@ -120,28 +146,28 @@ Maxmin maxmin_inst(
 
 wire [SF_WIDTH-1:0] A_sub, B_sub;
 
-altfp_16int2fp int2fpconv_inst3 (.dataa(OFFSET), .clock(clk), .result(fp_X_OFFSET)); // to floating point
+altfp_16int2fp int2fpconv_inst3 (.dataa(OFFSET), .clock(clk_fast), .result(fp_X_OFFSET)); // to floating point
 
 //compensate gain. 7 clks
 //assign A_comp = A_in;
-altfp_mul mul_inst1 (.dataa(A_fp), .datab(A_scale), .clock(clk), .result(A_comp) ); // Multiply by 1 to avoid clock skew. This could be done by adding a 7 clk delay?
-altfp_mul mul_inst2 (.dataa(B_fp), .datab(B_scale), .clock(clk), .result(B_comp) ); // ajust gain. This could be done in fixed point.
+altfp_mul mul_inst1 (.dataa(A_fp), .datab(A_scale), .clock(clk_fast), .result(A_comp) ); // Multiply by 1 to avoid clock skew. This could be done by adding a 7 clk delay?
+altfp_mul mul_inst2 (.dataa(B_fp), .datab(B_scale), .clock(clk_fast), .result(B_comp) ); // ajust gain. This could be done in fixed point.
 
 // delata sigma, 7 clks
-altfp_sub sub_inst1 (.dataa(A_comp), .datab(B_comp), .clock(clk), .result(delta), .zero() ); // Delta. 7 clks
-altfp_add add_inst1 (.dataa(A_comp), .datab(B_comp), .clock(clk), .result(sigma), .zero(sigma_zero) );// Sigma. 7 clks
+altfp_sub sub_inst1 (.dataa(A_comp), .datab(B_comp), .clock(clk_fast), .result(delta), .zero() ); // Delta. 7 clks
+altfp_add add_inst1 (.dataa(A_comp), .datab(B_comp), .clock(clk_fast), .result(sigma), .zero(sigma_zero) );// Sigma. 7 clks
 
 // division, 14 clks
-altfp_div3232 div_inst2 (.dataa(delta), . datab(sigma_div), .clock(clk), .result(C));   //C = (A-B)/(A+B). 14 clks
+altfp_div3232 div_inst2 (.dataa(delta), . datab(sigma_div), .clock(clk_fast), .result(C));   //C = (A-B)/(A+B). 14 clks
 
-altfp_mul mul_inst3 (.dataa(FP_KXY), .datab(scale), .clock(clk), .result(Kxy) ); //  
+altfp_mul mul_inst3 (.dataa(FP_KXY), .datab(scale), .clock(clk_fast), .result(Kxy) ); //  
 
 // scale. 7 clks
-altfp_mul mul_inst4 (.dataa(Kxy), .datab(C), .clock(clk), .result(D) ); //D is position value in mm   
+altfp_mul mul_inst4 (.dataa(Kxy), .datab(C), .clock(clk_fast), .result(D) ); //D is position value in um   
 
 //adjust offset. 7 clks
-altfp_mul mul_inst5 (.dataa(fp_X_OFFSET), .datab(fpdot001), .clock(clk), .result(fpOFFSETmm) );  //um to mm
-altfp_add add_inst2(.dataa(D), .datab(fpOFFSETmm), .clock(clk), .result(fp_pos_mm) );// fp position in mm
+//altfp_mul mul_inst5 (.dataa(fp_X_OFFSET), .datab(fpdot001), .clock(clk_fast), .result(fpOFFSETmm) );  //um to mm
+altfp_add add_inst2(.dataa(D), .datab(fp_X_OFFSET), .clock(clk_fast), .result(fp_pos_um) );// fp position in um
 
 // Tc = tao*T = [-1/ln(K2)] * T
 // tao = 1/(2Pi*Fc), Fc: 3dB BW of the LPF
@@ -155,11 +181,11 @@ altfp_add add_inst2(.dataa(D), .datab(fpOFFSETmm), .clock(clk), .result(fp_pos_m
 
 // LPF. 22 clks
 LPF_IIR LPF_output_inst0( 
-    .FCLK(clk),
+    .FCLK(clk_fast),
     .in_valid(LPF_en), //
-	 .data_in(fp_pos_mm), //
+	 .data_in(fp_pos_um), //
 	 .K2(IIR_OUT_K2),
-    .data_out(fp_pos_mm_LPF) //
+    .data_out(fp_pos_um_LPF) //
     );
 
 

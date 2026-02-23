@@ -37,7 +37,6 @@ module channel_block(
  output reg [SF_WIDTH-1:0] fp_ch2_Amp,
  output reg [SF_WIDTH-1:0] fp_ch3_Amp,
  output reg [SF_WIDTH-1:0] fp_ch4_Amp
- 
 );
 
 reg [SF_WIDTH-1:0] fp_ch1, fp_ch2, fp_ch3, fp_ch4;
@@ -130,6 +129,7 @@ BLR_GAIN snap_inst(
 wire [DATA_WIDTH-1:0] DDC_error;
 assign error = DDC_error | {14'b0,of0|of1|of2|of3,nan0|nan1|nan2|nan3};
 
+// din -> DDC -> fp_ch -> ch (demodulated) -> Amp (demod. 2.5 MHz) 
 DDC DDC_inst(
 	.din_0(din[15:0]), //16 bit ADC value 
 	.din_1(din[31:16]),//16 bit ADC value 

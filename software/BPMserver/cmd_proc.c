@@ -12,7 +12,7 @@
 #include "main.h"
 
 #define BLOCK_SIZE 1024 //block transfer size for FAST FIFO
-#define PACKET_SIZE 14 //block transfer size for PACKET
+#define PACKET_SIZE 256 //block transfer size for PACKET. was 64
 
 static inline void writeReg(void* addr, uint32_t value)
 {
@@ -26,10 +26,10 @@ static inline uint32_t readReg(void* addr)
 }
 
 float correction (float x, float y){
-	float a = 0.994 ;
-	float c = 0.000258;
+	float a = 1;//0.994 ;
+	float c = 0;//0.000258;
 	
-	return a + c*(x^2 + y^2);
+	return a + c*(x*x + y*y);
 	
 }
 
@@ -121,8 +121,6 @@ int cmd_proc(char *cmdString_in , int *value_back, char **string_back, int **arr
 					else if(cntr == 7) {
 							ypos.i = readReg(VR_BASE+SFIFO); // read Y position into memory;	
 						}
-
-
 					else{
 						dataArray[cntr]= readReg(VR_BASE+SFIFO);	
 					}
@@ -191,17 +189,14 @@ int cmd_proc(char *cmdString_in , int *value_back, char **string_back, int **arr
 		if ( strcmp(cmd,"FP_CH3_NF")== 0 ) {writeReg(VR_BASE+FP_CH3_NF,invalue);return 0;}
 		if ( strcmp(cmd,"FP_CH3_NF?")== 0 ) {*value_back = readReg(VR_BASE+FP_CH3_NF);return 1;}
 
-//		if ( strcmp(cmd,"CH0_OFFSET")== 0 ) {writeReg(VR_BASE+CH0_ADC_OFFSET,invalue);return 0;}
-//		if ( strcmp(cmd,"CH0_OFFSET?")== 0 ) {*value_back = readReg(VR_BASE+CH0_ADC_OFFSET);return 1;}
-//			
-//		if ( strcmp(cmd,"CH1_OFFSET")== 0 ) {writeReg(VR_BASE+CH1_ADC_OFFSET,invalue);return 0;}
-//		if ( strcmp(cmd,"CH1_OFFSET?")== 0 ) {*value_back = readReg(VR_BASE+CH1_ADC_OFFSET);return 1;}
+ 		if ( strcmp(cmd,"TRIP:CLR")== 0 ) {writeReg(VR_BASE+CLEAR_TRIP,invalue);return 0;}
+
 		
 		// Apr 9 2024
 		if ( strcmp(cmd,"COMB_ALPHA")== 0 ) {writeReg(VR_BASE+COMB_ALPHA_OFFSET,invalue);return 0;}
 		if ( strcmp(cmd,"COMB_ALPHA?")== 0 ) {*value_back = readReg(VR_BASE+COMB_ALPHA_OFFSET);return 1;}
 		
-    	printf("\n\r Error: Bad command %s \n\r", cmd);
+    	//printf("\n\r Error: Bad command %s \n\r", cmd);
 		
 		}
 

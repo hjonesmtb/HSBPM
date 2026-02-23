@@ -17,7 +17,7 @@
 //-----------------------------
 
 //parameter FPGA_VERSION_NO = 32'd0047; //verification
-parameter FPGA_VERSION_NO = 32'd20250314; // Modified on Jan 2 2025
+parameter FPGA_VERSION_NO = 32'd20260219; // Modified on Feb 3 2026
 
 module DE10_NANO_SoC_GHRD(
 
@@ -92,7 +92,7 @@ module DE10_NANO_SoC_GHRD(
 
 	 //////////// GPIO //////////
 	 
-	 input GPIO_1_0,  // ext_trigger
+	 output GPIO_1_0,  // trip
 	 output GPIO_1_1, // VC1
 	 output GPIO_1_2, // clk_cal (for calibration source) 
 	 output GPIO_1_3, // VC2
@@ -238,11 +238,29 @@ assign LED[7: 1] = fpga_led_internal;
 assign fpga_clk_50 = FPGA_CLK1_50;
 assign stm_hw_events = {{15{1'b0}}, SW, fpga_led_internal, fpga_debounced_buttons};
 
+wire bpm_ok, tripped;
+reg clear_trip;
+wire clr_trip_resyn;
+
+pulse_stretcher pulse_stretch_inst(
+    .clk(SYS_CLK),
+    .pulse_in(clear_trip),    // input pulse (1 clock wide)
+    .pulse_out(clr_trip_resyn)    // output pulse (25 clocks wide to be visible to DCLK)
+);
+
+BPM_trip trip_gen(
+   .DCLK(DCLK),   // 2.5 MHz
+	.X_fp(X_fp),
+	.Y_fp(Y_fp),
+	.clear_trip(clr_trip_resyn), // reset bpm_ok
+	.tripped_reg(tripped),
+	.bpm_ok(bpm_ok) // 2.5 MHz clock when OK
+
+    );
+
 
 // ========================= GPIO Pin Mapping ===============================
 reg VC1, VC2; // Crossbar switch control
-// wire ATTEN_A0, ATTEN_A1; // attenuation bits for calibration source
-wire ATTEN_EN; // gain, attenuation enable for VGA (+15 dB, -18 dB)
 wire ST_pulse; // 1126 Hz duty cycle for calibration source
 
 assign GPIO_1_3 = VC2; 
@@ -252,7 +270,8 @@ assign GPIO_1_2 = Ena_ST; // Connected to AFE input selector to choose between e
 assign GPIO_1_4 = ATTEN_EN; // enable/disable VGA attenuation
 assign GPIO_1_7 = Ena_ST? ST_pulse : 0;  // Modulate self-test signal.
 
-wire ext_trigger = GPIO_1_0;	 
+
+assign GPIO_1_0 = bpm_ok;	 
 
 wire LED_RUNNING;
 wire LED_Fault = Cold_Reset_Req;
@@ -261,76 +280,41 @@ assign GPIO_0_34 = LED_RUNNING;  // LED_COMM, indicating communication activity,
 assign GPIO_0_35 = LED_Fault;  // should response to reset_push button action? 
 
 //ADC interface
-wire [13:0] ADC_DA,ADC_DB,ADC_DC,ADC_DD;
 
 assign GPIO_1_34 = ADC_CLK;
 assign GPIO_0_1 = ADC_CLK;
 	
-assign ADC_DA[0] = GPIO_1_21; //ADC_DA0
-assign ADC_DA[1] = GPIO_1_18; //ADC_DA1
-assign ADC_DA[2] = GPIO_1_19; //ADC_DA2
-assign ADC_DA[3] = GPIO_1_16; //ADC_DA3
-assign ADC_DA[4] = GPIO_1_17; //ADC_DA4
-assign ADC_DA[5] = GPIO_1_14; //ADC_DA5
-assign ADC_DA[6] = GPIO_1_15; //ADC_DA6
-assign ADC_DA[7] = GPIO_1_12; //ADC_DA7
-assign ADC_DA[8] = GPIO_1_13; //ADC_DA8
-assign ADC_DA[9] = GPIO_1_10; //ADC_DA9
-assign ADC_DA[10] = GPIO_1_11; //ADC_DA10
-assign ADC_DA[11] = GPIO_1_8; //ADC_DA11
-assign ADC_DA[12] = GPIO_1_9; //ADC_DA12
-assign ADC_DA[13] = GPIO_1_6; //ADC_DA13
-	
-assign ADC_DB[0] = GPIO_1_35; //ADC_DB0
-assign ADC_DB[1] = GPIO_1_32; //ADC_DB1
-assign ADC_DB[2] = GPIO_1_33; //ADC_DB2
-assign ADC_DB[3] = GPIO_1_30; //ADC_DB3
-assign ADC_DB[4] = GPIO_1_31; //ADC_DB4
-assign ADC_DB[5] = GPIO_1_28; //ADC_DB5
-assign ADC_DB[6] = GPIO_1_29; //ADC_DB6
-assign ADC_DB[7] = GPIO_1_26; //ADC_DB7
-assign ADC_DB[8] = GPIO_1_27; //ADC_DB8
-assign ADC_DB[9] = GPIO_1_24; //ADC_DB9
-assign ADC_DB[10] = GPIO_1_25; //ADC_DB10
-assign ADC_DB[11] = GPIO_1_22; //ADC_DB11
-assign ADC_DB[12] = GPIO_1_23; //ADC_DB12
-assign ADC_DB[13] = GPIO_1_20; //ADC_DB13
+wire [13:0] ADC_DA = {
+		GPIO_1_6,  GPIO_1_9,  GPIO_1_8,  GPIO_1_11,
+		GPIO_1_10, GPIO_1_13, GPIO_1_12, GPIO_1_15,
+		GPIO_1_14, GPIO_1_17, GPIO_1_16, GPIO_1_19,
+		GPIO_1_18, GPIO_1_21
+};
 
-assign ADC_DC[0] = GPIO_0_14; //ADC_DC0
-assign ADC_DC[1] = GPIO_0_17; //ADC_DC1
-assign ADC_DC[2] = GPIO_0_16; //ADC_DC2
-assign ADC_DC[3] = GPIO_0_19; //ADC_DC3
-assign ADC_DC[4] = GPIO_0_18; //ADC_DC4
-assign ADC_DC[5] = GPIO_0_21; //ADC_DC5
-assign ADC_DC[6] = GPIO_0_20; //ADC_DC6
-assign ADC_DC[7] = GPIO_0_23; //ADC_DC7
-assign ADC_DC[8] = GPIO_0_22; //ADC_DC8
-assign ADC_DC[9] = GPIO_0_25; //ADC_DC9
-assign ADC_DC[10] = GPIO_0_24; //ADC_DC10
-assign ADC_DC[11] = GPIO_0_27; //ADC_DC11
-assign ADC_DC[12] = GPIO_0_26; //ADC_DC12
-assign ADC_DC[13] = GPIO_0_29; //ADC_DC13
-	
-assign ADC_DD[0] = GPIO_0_0; //ADC_DD0
-assign ADC_DD[1] = GPIO_0_3; //ADC_DD1
-assign ADC_DD[2] = GPIO_0_2; //ADC_DD2
-assign ADC_DD[3] = GPIO_0_5; //ADC_DD3
-assign ADC_DD[4] = GPIO_0_4; //ADC_DD4
-assign ADC_DD[5] = GPIO_0_7; //ADC_DD5
-assign ADC_DD[6] = GPIO_0_6; //ADC_DD6
-assign ADC_DD[7] = GPIO_0_9; //ADC_DD7
-assign ADC_DD[8] = GPIO_0_8; //ADC_DD8
-assign ADC_DD[9] = GPIO_0_11; //ADC_DD9
-assign ADC_DD[10] = GPIO_0_10; //ADC_DD10
-assign ADC_DD[11] = GPIO_0_13; //ADC_DD11
-assign ADC_DD[12] = GPIO_0_12; //ADC_DD12
-assign ADC_DD[13] = GPIO_0_15; //ADC_DD13
-	
+wire [13:0] ADC_DB = {
+		GPIO_1_20, GPIO_1_23, GPIO_1_22, GPIO_1_25,
+		GPIO_1_24, GPIO_1_27, GPIO_1_26, GPIO_1_29,
+		GPIO_1_28, GPIO_1_31, GPIO_1_30, GPIO_1_33,
+		GPIO_1_32, GPIO_1_35
+};
+
+wire [13:0] ADC_DC = {
+		GPIO_0_29, GPIO_0_26, GPIO_0_27, GPIO_0_24,
+		GPIO_0_25, GPIO_0_22, GPIO_0_23, GPIO_0_20,
+		GPIO_0_21, GPIO_0_18, GPIO_0_19, GPIO_0_16,
+		GPIO_0_17, GPIO_0_14
+};
+	  
+wire [13:0] ADC_DD = {
+		GPIO_0_15, GPIO_0_12, GPIO_0_13, GPIO_0_10,
+		GPIO_0_11, GPIO_0_8,  GPIO_0_9,  GPIO_0_6,
+		GPIO_0_7,  GPIO_0_4,  GPIO_0_5,  GPIO_0_2,
+		GPIO_0_3,  GPIO_0_0
+}; 
+
+
 // clock generation
-	
-//reg ST_on;	// This signal controls the input selector switch on the AFE. 
-	
-wire pll_locked; 
+
 wire SYS_RST = ~hps_fpga_reset_n;
 
 wire SYS_CLK; // 50 MHz clock, locked to internal FPGA clock.
@@ -338,11 +322,10 @@ wire self_CLK; // 20 MHz clock, locked to internal FPGA clock.
 wire ex_CLK; // Buffered copy of 23.05 MHz LO.
 wire syn_CLK; // 20 MHz clock, locked to LO.
 wire Sampling_CLK; // 20 MHz sampling clock for ADC. Either syn_CLK or self_CLK.
+wire pll_locked; 
 
 assign ADC_CLK = Sampling_CLK; //ADC clock 20 MHz, for AD9248-20.
 wire SCLK = Sampling_CLK; //processing clock.
-
-wire ADC_clksel;
 
 clk20_pll clk_pll_inst0 
 	(
@@ -391,12 +374,7 @@ reg [ADC_DATA_WIDTH-1:0] Ch1_ADC_DATA,	Ch2_ADC_DATA,Ch3_ADC_DATA,	Ch4_ADC_DATA/*
 // ADC inputs are cross-swapped on ADC (Ch1 --> ADC input B, Ch2 --> ADC input A), so we must undo this.
 // when flip sign is high, the inputs are swapped by the crossbar switch, so we undo this.
 always @ (posedge ADC_CLK) 
-	begin 
-//		if(flip_sign) begin
-//			Ch1_ADC_DATA <= ADC_DA; Ch2_ADC_DATA <= ADC_DB; 
-//			Ch3_ADC_DATA <= ADC_DC; Ch4_ADC_DATA <= ADC_DD;		
-//		end
-
+	begin
 		Ch1_ADC_DATA <= ADC_DB; Ch2_ADC_DATA <= ADC_DA; 
 		Ch3_ADC_DATA <= ADC_DD; Ch4_ADC_DATA <= ADC_DC;
 
@@ -487,8 +465,7 @@ parameter integer 	CAL_WAVE_ADDR = 33;
 parameter integer 	IIR_OUT_K1_ADDR = 47;
 parameter integer 	IIR_OUT_K2_ADDR = 48;
 
-parameter integer 	CH2_DAC_PEAK_OFFSET_ADDR = 51;
-parameter integer 	CH2_DAC_AVG_OFFSET_ADDR = 52;
+parameter integer 	CLEAR_TRIP_ADDR = 51;
 	
 parameter integer MODULE_ID1_ADDR = 71;
 parameter integer MODULE_ID2_ADDR = 72;
@@ -592,8 +569,6 @@ soc_system u0(
 					.myavalonbus32_0_conduit_end_writedata  (avalon_writedata), // .writedata
 					.myavalonbus32_0_conduit_end_cs 			 (avalon_cs),        // .chipselect
 					.myavalonbus32_0_conduit_end_bus_clk    ()           //  myavalonbus32_0_clk.clk
-		
-				
            );
 
 
@@ -602,9 +577,9 @@ soc_system u0(
 wire [15:0] status_reg = {channel_error[7:0],pll_locked,No_beam};
 
 //assign GAIN_EN = `CON_REG_L[0];// Change for auto gain control
-assign ATTEN_EN =`CON_REG_L[1];// Change for auto gain control
+wire ATTEN_EN =`CON_REG_L[1]; // gain, attenuation enable for VGA (0 dB, -18 dB)
 wire ch_select = `CON_REG_L[2];
-assign ADC_clksel =  `CON_REG_L[3]; //select external clk or internal 20 Mhz clk
+wire ADC_clksel =  `CON_REG_L[3]; //select external clk or internal 20 Mhz clk
 wire waveform_select = `CON_REG_L[4]; // select 
 wire LPF_en = `CON_REG_L[5]; // enable output IIR 
 wire Ena_ST = `CON_REG_L[6]; // enable self-test signal
@@ -672,7 +647,7 @@ always@(posedge SYS_CLK)
 	
 	/*   slow fifo occupancy     */		
 	if ((avalon_addr == SFIFO_WD_ADDR) & (avalon_read_o == 1)) 
-			begin comm_act <= ~comm_act; dout <= {16'b0,sfifo_wr_wd,sfifo_rd_wd}; end // HJ modified Nov 21,2023. Added sfifo_wr_wd.
+			begin comm_act <= ~comm_act; dout <= {sfifo_wr_wd,sfifo_rd_wd}; end // HJ modified Nov 21,2023. Added sfifo_wr_wd.
 	
 	/*   Read slow fifo     */		
 	if ((avalon_addr == SFIFO_ADDR) & (avalon_read_o == 1)) 
@@ -773,7 +748,12 @@ always@(posedge SYS_CLK)
 	if ((avalon_addr == COMB_ALPHA_ADDR) & (avalon_write_o == 1) ) 
 			`COMB_ALPHA <= avalon_writedata; 
 	if ((avalon_addr == COMB_ALPHA_ADDR) & (avalon_read_o == 1) ) 
-			dout <= `COMB_ALPHA;  	
+			dout <= `COMB_ALPHA;  
+		
+	   			 /*   CLEAR TRIP */
+	if ((avalon_addr == CLEAR_TRIP_ADDR) & (avalon_write_o == 1) ) 
+			clear_trip <= 1;  
+	else  clear_trip <= 0;
 			
 end //else
 
@@ -815,15 +795,9 @@ reg [21:0] count_10Hz; // count to 2.5 million
 reg flip_sign;
 reg dead_zone; // when this is HI, the signal is noisy from input switching.
 
-// June 26 2024 - VC1 and VC2 are 100 Hz pulse with 50% duty, to switch crossbar switch
 // when VC1 is HI and VC2 is LO, the inputs are swapped, and must be scaled by -1. (based on the flip_sign signal)
+// Switching at the falling edge of the gate (i.e. the pulser)
 always @ (negedge new_gate) begin
-	
-	// this was commented last time.... July 25
-//	count_10Hz <= count_10Hz + 1;
-//	if(count_10Hz == T_1ms)begin
-//		count_10Hz <= 0;	
-//	end
 	
 	if(cal_sel) begin
 		if(flip_sign) begin
@@ -837,27 +811,7 @@ always @ (negedge new_gate) begin
 			VC2 <= 0;
 			flip_sign <= 1;		
 		end
-		dead_zone <= 0;
-	
-//		if(count_10Hz == T_1ms - 12575) begin // T_1s - 250000
-//			VC1 <= 1;
-//			VC2 <= 0;
-//			dead_zone <= 1;
-//		end
-//		else if(count_10Hz == T_1ms-12500) begin // T_1s - 25000
-//			flip_sign <= 1; // ~20 us latency
-//			dead_zone <= 0;
-//		end
-//		else if(count_10Hz == T_1ms-75) begin // T_1s - 25000
-//			VC1 <= 0;
-//			VC2 <= 1;
-//			dead_zone <= 1;
-//		end
-//		else if(count_10Hz == T_1ms) begin // T_1s - 25000
-//			flip_sign <= 0; // ~20 us latency
-//			dead_zone <= 0;
-//		end	
-		
+		dead_zone <= 0;		
 	end
 	
 	else begin // default state: channels not swapped
@@ -980,8 +934,7 @@ channel_block Ch_XY_inst(
  .fp_ch4_Amp(fp_ch4_Amp)
 );
 
-
-// Remove noisy transitions from demodulated signal. CHANGE FOR V3 - does each channel need it's own gate?
+// Remove noisy transitions from demodulated signal.
 
 wire [FULL_WIDTH-1:0] signal_delayed_X;
 alignment align_X(
@@ -1008,11 +961,12 @@ alignment align_Y(
 // ----------------------- Calculate beam position, and slow FIFO values ------------------------------
 
 wire [SF_WIDTH-1:0] peak_A,peak_B,peak_C,peak_D/*synthesis keep*/; // Slow FIFO values for demodulated envelopes
-wire [SF_WIDTH-1:0] X_fp_pos,Y_fp_pos/*synthesis keep*/; // slow FIFO values for beam position
-wire [SF_WIDTH-1:0] X_fp_pos_uncal, Y_fp_pos_uncal; // uncalibrated beam position (no autocal)
+wire [SF_WIDTH-1:0] X_fp_decimated,Y_fp_decimated/*synthesis keep*/; // slow FIFO values for beam position
+wire [SF_WIDTH-1:0] X_fp, Y_fp; // uncalibrated beam position (no autocal)
 wire [SF_WIDTH-1:0] max_A,max_B,min_A,min_B,max_C,max_D,min_C,min_D/*synthesis keep*/; 
 
 wire maxmin_rst; //for debug use, to clear the maxmin register
+wire clk_slow_x;
 //the fifo_clr_reg is one clk SYS_CLK, needs to be streched to one DCLK 
 pulse_shaper pulse_inst(
 	.data_in(SYS_RST | fifo_clr_reg),
@@ -1035,14 +989,15 @@ calculate_position cal_position_X(
 	.dead_zone(dead_zone),
 	.decimate(decimate),
 	.flip_sign(flip_sign),
+	.clk_slow2(clk_slow_x),
 	.A_comp(peak_A),
 	.B_comp(peak_B),
 	.A_max(max_A),
 	.B_max(max_B),
 	.A_min(min_A),
 	.B_min(min_B),
-	.fp_pos_mm_LPF(X_fp_pos_uncal), //X_fp_pos_uncal
-	.fp_pos_slow(X_fp_pos)// decimated output - X_fp_pos
+	.fp_pos_um_LPF(X_fp), //X_fp
+	.fp_pos_slow(X_fp_decimated)// decimated output - X_fp_pos
 	
     );
 	 
@@ -1061,17 +1016,58 @@ calculate_position cal_position_Y(
 	.dead_zone(dead_zone),
 	.decimate(decimate),
 	.flip_sign(flip_sign),
+	.clk_slow2(),
 	.A_comp(peak_C),
 	.B_comp(peak_D),
 	.A_max(max_C),
 	.B_max(max_D),
 	.A_min(min_C),
 	.B_min(min_D),
-	.fp_pos_mm_LPF(Y_fp_pos_uncal), //Y_fp_pos_uncal
-	.fp_pos_slow(Y_fp_pos) // decimated output - Y_fp_pos 
+	.fp_pos_um_LPF(Y_fp), //Y_fp
+	.fp_pos_slow(Y_fp_decimated) // decimated output - Y_fp_pos 
 	 
     );
-	 
+	
+	parameter HIST_DEPTH = 123; // 2*123 + 10 = 256
+		
+	reg [8:0] hist_write_addr = 0;
+	reg [8:0] i_hist = 0;
+	reg [31:0] x_hist[0:HIST_DEPTH-1] /* synthesis ramstyle = "logic" */;
+	reg [31:0] x_hist_read[0:HIST_DEPTH-1] /* synthesis ramstyle = "logic" */;
+	reg [31:0] y_hist[0:HIST_DEPTH-1] /* synthesis ramstyle = "logic" */;
+	reg [31:0] y_hist_read[0:HIST_DEPTH-1] /* synthesis ramstyle = "logic" */;
+	reg hist_busy;
+	
+	wire rst_hist;
+	// RAM Loading Logic
+	// still have some glitches on the y data. could be from syncing between X and Y clock_slow 
+	// could be due to hist_busy metastability
+	always @(posedge clk_slow_x) begin
+		 if (rst_hist) begin
+			  hist_write_addr <= 0;
+
+		 end else begin
+			
+				x_hist[hist_write_addr] <= X_fp_decimated;
+				y_hist[hist_write_addr] <= Y_fp_decimated;
+				
+				// Check if RAM is full
+				if (hist_write_addr >= HIST_DEPTH-1) begin
+					 hist_write_addr <= 0;
+					 
+					 // Copy raster to x_hist_read
+					 for (i_hist = 0; i_hist < HIST_DEPTH; i_hist = i_hist + 1) begin
+							if(!hist_busy) begin
+								x_hist_read[i_hist] <= x_hist[i_hist];
+								y_hist_read[i_hist] <= y_hist[i_hist];	
+							end
+					 end
+				end else begin
+					 hist_write_addr <= hist_write_addr + 1;
+				end
+			  
+		 end
+	end
 
 //================ Fast FIFO to transfer 20 MHz data from FPGA to SoC ===================
 
@@ -1104,9 +1100,10 @@ calculate_position cal_position_Y(
 	reg [SFIFO_WIDTH-1:0] sfifo_data_in;
 	wire [SFIFO_WIDTH-1:0] sfifo_dout;
 	
-	wire [7:0] sfifo_wr_wd, sfifo_rd_wd /*synthesis keep*/;
+	wire [9:0] sfifo_wr_wd, sfifo_rd_wd /*synthesis keep*/;
 	wire sfifo_half_full = sfifo_wr_wd[6]; // 64   
 	
+	// changed from 128 --> 512 words on Feb 19 2026
 	slfifo Slow_FIFO (
 		.aclr(SYS_RST), //adding a reset here would be useful.
 		.data(sfifo_data_in),
@@ -1124,7 +1121,9 @@ calculate_position cal_position_Y(
 	
 //============ Packing Slow FIFO=================================
 	parameter PID = 32'h4142504d; // "ABPM"
-	
+	parameter END_STATE = 21;
+		
+	wire free_space = (sfifo_wr_wd < 511);
 	reg [7:0] p_state;
 	
 	reg new_gate_last;
@@ -1136,34 +1135,73 @@ calculate_position cal_position_Y(
 	assign sfifo_trig = ((!new_gate) && new_gate_last) && (!dead_zone); // load sfifo when new_gate is falling, but not when the inputs are being switched.
 
 //data packet size is 8 words (32bit)
-
+	reg [9:0] i_sfifo = 0; // hold 128 samples
 	always @(posedge SCLK)
 	begin
 		if(SYS_RST)
 			begin
 				p_state <= 0;
 				sFIFO_wr<= 0;
+				i_sfifo <= 0;
+				hist_busy <= 0;
 			end
 		else
 			begin
-				case(p_state)
-					0:if(sfifo_trig && sfifo_wr_wd < 100) // Modified on Dec 18, 2023
+				case(p_state) // write 62 words to SFIFO. not working right now. 
+					0:if(sfifo_trig && sfifo_wr_wd <= 256) // changed from 64. 
 						begin sFIFO_wr<= 1; sfifo_data_in <= PID; p_state <= 1; end
-					1: begin sfifo_data_in <= {`CON_REG_H,`CON_REG_L,status_reg}; p_state <= 2; end
-					2: begin sfifo_data_in <= peak_A; p_state <= 3; end
-					3: begin sfifo_data_in <= peak_B; p_state <= 4; end			
-					4: begin sfifo_data_in <= peak_C; p_state <= 5; end
-					5: begin sfifo_data_in <= peak_D; p_state <= 6; end
-					6: begin sfifo_data_in <= X_fp_pos_uncal; p_state <= 7; end
-					7: begin sfifo_data_in <= Y_fp_pos_uncal; p_state <= 8; end
-					8: begin sfifo_data_in <= X_fp_pos_uncal; p_state <= 9; end
-					9: begin sfifo_data_in <= {humi,temp}; p_state <= 10; end
-					10: begin sfifo_data_in <= max_A; p_state <= 11; end
-					11: begin sfifo_data_in <= max_B; p_state <= 12; end
-					12: begin sfifo_data_in <= min_A; p_state <= 13; end
-					13: begin sfifo_data_in <= min_B; p_state <= 14; end
-					14: begin sFIFO_wr<= 0; p_state <= 0; end
-					
+					1: begin sfifo_data_in <= {`CON_REG_H,`CON_REG_L,status_reg}; p_state <= free_space? 2 : END_STATE; end
+					2: begin sfifo_data_in <= peak_A; p_state <= free_space? 3 : END_STATE; end
+					3: begin sfifo_data_in <= peak_B; p_state <= free_space? 4 : END_STATE; end			
+					4: begin sfifo_data_in <= peak_C; p_state <= free_space? 5 : END_STATE; end
+					5: begin sfifo_data_in <= peak_D; p_state <= free_space? 6 : END_STATE; end
+					6: begin sfifo_data_in <= X_fp_decimated; p_state <= free_space? 7 : END_STATE; end // 51 kHz decimated output (FEB 12 2026)
+					7: begin sfifo_data_in <= Y_fp; p_state <= free_space? 8 : END_STATE; end
+					8: begin sfifo_data_in <= X_fp; p_state <= free_space? 9 : END_STATE; end 
+					9: begin sfifo_data_in <= {humi,temp}; p_state <= free_space? 10 : END_STATE;
+								i_sfifo <= 0;
+								hist_busy <= 1;
+						end // write the 127th word						
+	
+					10: begin
+							 sfifo_data_in <= x_hist_read[i_sfifo];
+
+							 if (!free_space) begin
+								  p_state <= END_STATE;
+								  i_sfifo <= 0;   // reset for next time
+								  hist_busy <= 0;
+							 end
+							 else if (i_sfifo >= HIST_DEPTH-1) begin
+								  p_state <= 11;
+								  i_sfifo <= 0;   // done sending all elements
+							 end
+							 else begin
+								  i_sfifo <= i_sfifo + 1;
+								  p_state <= 10;     // stay in this state
+							 end
+						end
+
+					11: begin
+							 sfifo_data_in <= y_hist_read[i_sfifo];
+
+							 if (!free_space) begin
+								  p_state <= END_STATE;
+								  i_sfifo <= 0;   // reset for next time
+								  hist_busy <= 0;
+							 end
+							 else if (i_sfifo >= HIST_DEPTH-1) begin
+								  p_state <= END_STATE;
+								  i_sfifo <= 0;   // done sending all elements
+								  hist_busy <= 0;
+							 end
+							 else begin
+								  i_sfifo <= i_sfifo + 1;
+								  p_state <= 11;     // stay in this state
+							 end
+						end
+
+					END_STATE: begin sFIFO_wr<= 0; p_state <= 0; end
+							
 					default:
 						begin sFIFO_wr<= 0; p_state <= 0; end
 				endcase
