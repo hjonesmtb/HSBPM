@@ -1,10 +1,9 @@
 /*
  * cmd_proc.c  
+ * for BL4N BPM server
  * modified March 5 2025. added NL correction.
  */
  
-
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -35,8 +34,8 @@ float correction (float x, float y){
 
 
 union Data {
-	int i;
-	float f;
+	int ival;
+	float fval;
 };
 	
 int dataArray[1024];
@@ -53,6 +52,9 @@ int cmd_proc(char *cmdString_in , int *value_back, char **string_back, int **arr
 	union Data xpos;
 	union Data ypos;
 	float corr;
+	
+	union Data invalue_fp;
+	union Data valueback_fp;
 		
 	char cmd[50],*sdp,*chp;
 
@@ -68,8 +70,7 @@ int cmd_proc(char *cmdString_in , int *value_back, char **string_back, int **arr
 	cmdlen = strlen(cmd);
 
 	//printf("\n\r cmd_porc.c:Your command is %s, Len=%d\n\r",cmd, cmdlen);
-
-	  
+ 
 	if ( cmdlen == 0 ){
     	printf("\n\r Error: Your command doesn't contain any characters \n\r" );  return 0;}
 	else {
@@ -85,6 +86,7 @@ int cmd_proc(char *cmdString_in , int *value_back, char **string_back, int **arr
 			if (val_len > 0){
 				if (val_len == strspn(sdp,"-1234567890")) {
 					invalue = atoi(sdp);
+					invalue_fp.fval = atof(sdp)/100000;
 				}
 				else { printf("\n\r Error: There is a non digit character in value \n\r" ); return 0;
 				}
@@ -104,8 +106,7 @@ int cmd_proc(char *cmdString_in , int *value_back, char **string_back, int **arr
 		if ( strcmp(cmd,"CH:SEL")== 0 ) {writeReg(VR_BASE+CH_SEL,invalue);return 0;}
 		
 		if ( strcmp(cmd,"PCA:GAIN")== 0 ) {writeReg(VR_BASE+PCA_GAIN,invalue);return 0;}
-		if ( strcmp(cmd,"PCA:GAIN?")== 0 ) {*value_back = readReg(VR_BASE+PCA_GAIN);return 1;}
-		
+		if ( strcmp(cmd,"PCA:GAIN?")== 0 ) {*value_back = readReg(VR_BASE+PCA_GAIN);return 1;}		
 	
 		if ( strcmp(cmd,"CONF2EEPROM")== 0 ) {writeReg(VR_BASE+EEPROM_WR,invalue);return 0;}
 		if ( strcmp(cmd,"EEPROM2CONF")== 0 ) {writeReg(VR_BASE+EEPROM_RD,invalue);return 0;}
@@ -115,23 +116,25 @@ int cmd_proc(char *cmdString_in , int *value_back, char **string_back, int **arr
 		if ( strcmp(cmd,"SFIFO?")== 0 ) {
 			
 				for(cntr=0;cntr<PACKET_SIZE;cntr++){
-					if(cntr == 6) {
-						xpos.i = readReg(VR_BASE+SFIFO); // read X position into memory;	
+					if(cntr == 7) {
+						xpos.ival = readReg(VR_BASE+SFIFO); // read X position into memory;
+						dataArray[cntr] = (int) xpos.fval;
 					}
-					else if(cntr == 7) {
-							ypos.i = readReg(VR_BASE+SFIFO); // read Y position into memory;	
+					else if(cntr == 8) {
+						ypos.ival = readReg(VR_BASE+SFIFO); // read Y position into memory;
+						dataArray[cntr] = (int) ypos.fval;	
 						}
 					else{
 						dataArray[cntr]= readReg(VR_BASE+SFIFO);	
 					}
 				}
 			// apply corrections to X and Y positions
-			corr = correction(xpos.f,ypos.f); //corr ~ (1 + c*r^2)
-			xpos.f = xpos.f*corr;
-			ypos.f = ypos.f*corr;
-				
-			dataArray[6] = xpos.i;	
-			dataArray[7] = ypos.i;	
+//			corr = correction(xpos.fval,ypos.fval); //corr ~ (1 + c*r^2)
+//			xpos.fval = xpos.fval*corr;
+//			ypos.fval = ypos.fval*corr;
+//				
+//			dataArray[6] = xpos.ival;	
+//			dataArray[7] = ypos.ival;	
 			
 			*array_Ptr = &dataArray[0]; *array_Dim = PACKET_SIZE;
     		return 3;}
@@ -143,24 +146,42 @@ int cmd_proc(char *cmdString_in , int *value_back, char **string_back, int **arr
 			*array_Ptr = &dataArray[0]; *array_Dim = BLOCK_SIZE;
     		return 3;}
 		
-        if ( strcmp(cmd,"TRIG:TH")== 0 ) {writeReg(VR_BASE+TRIG_TH,invalue);return 0;}
+      if ( strcmp(cmd,"TRIG:TH")== 0 ) {writeReg(VR_BASE+TRIG_TH,invalue);return 0;}
 		if ( strcmp(cmd,"TRIG:TH?")== 0 ) {*value_back = readReg(VR_BASE+TRIG_TH);return 1;}
 		
-        if ( strcmp(cmd,"TRANSITION")== 0 ) {writeReg(VR_BASE+TRANSITION,invalue);return 0;}
+      if ( strcmp(cmd,"TRANSITION")== 0 ) {writeReg(VR_BASE+TRANSITION,invalue);return 0;}
 		if ( strcmp(cmd,"TRANSITION?")== 0 ) {*value_back = readReg(VR_BASE+TRANSITION);return 1;}
 
 
-        if ( strcmp(cmd,"CAL_WAVE")== 0 ) {writeReg(VR_BASE+CAL_WAVE,invalue);return 0;}
+      if ( strcmp(cmd,"CAL_WAVE")== 0 ) {writeReg(VR_BASE+CAL_WAVE,invalue);return 0;}
 		if ( strcmp(cmd,"CAL_WAVE?")== 0 ) {*value_back = readReg(VR_BASE+CAL_WAVE);return 1;}
 		
-		if ( strcmp(cmd,"IIR_OUT_K1")== 0 ) {writeReg(VR_BASE+IIR_OUT_K1,invalue);return 0;}
-		if ( strcmp(cmd,"IIR_OUT_K1?")== 0 ) {*value_back = readReg(VR_BASE+IIR_OUT_K1);return 1;}
+		if ( strcmp(cmd,"IIR_OUT_K1")== 0 ) {
+			//writeReg(VR_BASE+IIR_OUT_K1,invalue);
+			writeReg(VR_BASE+IIR_OUT_K1,invalue_fp.ival);	
+			return 0;
+			}
+		if ( strcmp(cmd,"IIR_OUT_K1?")== 0 ) {
+			//*value_back = readReg(VR_BASE+IIR_OUT_K1);
+			valueback_fp.ival = readReg(VR_BASE+IIR_OUT_K1);
+			*value_back = (int) 100000*valueback_fp.fval;
+			return 1;
+			}
 
 		if ( strcmp(cmd,"BL")== 0 ) {writeReg(VR_BASE+BL,invalue);return 0;}
 		if ( strcmp(cmd,"BL?")== 0 ) {*value_back = readReg(VR_BASE+BL);return 1;}
 		
-		if ( strcmp(cmd,"IIR_OUT_K2")== 0 ) {writeReg(VR_BASE+IIR_OUT_K2,invalue);return 0;}
-		if ( strcmp(cmd,"IIR_OUT_K2?")== 0 ) {*value_back = readReg(VR_BASE+IIR_OUT_K2);return 1;}
+		if ( strcmp(cmd,"IIR_OUT_K2")== 0 ) {
+			//writeReg(VR_BASE+IIR_OUT_K2,invalue);
+			writeReg(VR_BASE+IIR_OUT_K2,invalue_fp.ival);	
+			return 0;
+			}
+		if ( strcmp(cmd,"IIR_OUT_K2?")== 0 ) {
+			//*value_back = readReg(VR_BASE+IIR_OUT_K2);
+			valueback_fp.ival = readReg(VR_BASE+IIR_OUT_K2);
+			*value_back = (int) 100000*valueback_fp.fval;
+			return 1;
+			}
 		
 		if ( strcmp(cmd,"MODULE_ID0")== 0 ) {writeReg(VR_BASE+MODULE_ID0,invalue);return 0;}
 		if ( strcmp(cmd,"MODULE_ID0?")== 0 ) {*value_back = readReg(VR_BASE+MODULE_ID0);return 1;}
@@ -168,34 +189,111 @@ int cmd_proc(char *cmdString_in , int *value_back, char **string_back, int **arr
 		if ( strcmp(cmd,"MODULE_ID1")== 0 ) {writeReg(VR_BASE+MODULE_ID1,invalue);return 0;}
 		if ( strcmp(cmd,"MODULE_ID1?")== 0 ) {*value_back = readReg(VR_BASE+MODULE_ID1);return 1;}
 		
-		if ( strcmp(cmd,"FP_KXY")== 0 ) {writeReg(VR_BASE+FP_KXY,invalue);return 0;}
-		if ( strcmp(cmd,"FP_KXY?")== 0 ) {*value_back = readReg(VR_BASE+FP_KXY);return 1;}
-		
-		if ( strcmp(cmd,"X_OFFSET")== 0 ) {writeReg(VR_BASE+X_OFFSET,invalue);return 0;}
-		if ( strcmp(cmd,"X_OFFSET?")== 0 ) {*value_back = readReg(VR_BASE+X_OFFSET);return 1;}
-		
-		if ( strcmp(cmd,"Y_OFFSET")== 0 ) {writeReg(VR_BASE+Y_OFFSET,invalue);return 0;}
-		if ( strcmp(cmd,"Y_OFFSET?")== 0 ) {*value_back = readReg(VR_BASE+Y_OFFSET);return 1;}
+		if ( strcmp(cmd,"FP_KXY")== 0 ) {
+			//writeReg(VR_BASE+FP_KXY,invalue);
+			writeReg(VR_BASE+FP_KXY,invalue_fp.ival);			
 			
-        if ( strcmp(cmd,"FP_CH0_NF")== 0 ) {writeReg(VR_BASE+FP_CH0_NF,invalue);return 0;}
-		if ( strcmp(cmd,"FP_CH0_NF?")== 0 ) {*value_back = readReg(VR_BASE+FP_CH0_NF);return 1;}
-
-		if ( strcmp(cmd,"FP_CH1_NF")== 0 ) {writeReg(VR_BASE+FP_CH1_NF,invalue);return 0;}
-		if ( strcmp(cmd,"FP_CH1_NF?")== 0 ) {*value_back = readReg(VR_BASE+FP_CH1_NF);return 1;}
+			return 0;
+			}
+		if ( strcmp(cmd,"FP_KXY?")== 0 ) {
+			//*value_back = readReg(VR_BASE+FP_KXY);
+			 valueback_fp.ival = readReg(VR_BASE+FP_KXY);
+			*value_back = (int) 100000*valueback_fp.fval;
+			
+			return 1;
+			}
 		
-		if ( strcmp(cmd,"FP_CH2_NF")== 0 ) {writeReg(VR_BASE+FP_CH2_NF,invalue);return 0;}
-		if ( strcmp(cmd,"FP_CH2_NF?")== 0 ) {*value_back = readReg(VR_BASE+FP_CH2_NF);return 1;}
+		if ( strcmp(cmd,"X_OFFSET")== 0 ) {
+			writeReg(VR_BASE+X_OFFSET,invalue);	
+			return 0;
+			}
+		if ( strcmp(cmd,"X_OFFSET?")== 0 ) {
+			*value_back = readReg(VR_BASE+X_OFFSET);
+			return 1;
+			}
+		
+		if ( strcmp(cmd,"Y_OFFSET")== 0 ) {
+			writeReg(VR_BASE+Y_OFFSET,invalue);
+			return 0;
+			}
+		if ( strcmp(cmd,"Y_OFFSET?")== 0 ) {
+			*value_back = readReg(VR_BASE+Y_OFFSET);
+			return 1;
+			}
+			
+      if ( strcmp(cmd,"FP_CH0_NF")== 0 ) {
+			//writeReg(VR_BASE+FP_CH0_NF,invalue);
+			writeReg(VR_BASE+FP_CH0_NF,invalue_fp.ival);	
+			return 0;
+			}
+		if ( strcmp(cmd,"FP_CH0_NF?")== 0 ) {
+			//*value_back = readReg(VR_BASE+FP_CH0_NF);
+			valueback_fp.ival = readReg(VR_BASE+FP_CH0_NF);
+			*value_back = (int) 100000*valueback_fp.fval;
+			return 1;
+			}
 
-		if ( strcmp(cmd,"FP_CH3_NF")== 0 ) {writeReg(VR_BASE+FP_CH3_NF,invalue);return 0;}
-		if ( strcmp(cmd,"FP_CH3_NF?")== 0 ) {*value_back = readReg(VR_BASE+FP_CH3_NF);return 1;}
+		if ( strcmp(cmd,"FP_CH1_NF")== 0 ) {
+			//writeReg(VR_BASE+FP_CH1_NF,invalue);
+			writeReg(VR_BASE+FP_CH1_NF,invalue_fp.ival);
+			return 0;
+			}
+		if ( strcmp(cmd,"FP_CH1_NF?")== 0 ) {
+			//*value_back = readReg(VR_BASE+FP_CH1_NF);
+			valueback_fp.ival = readReg(VR_BASE+FP_CH1_NF);
+			*value_back = (int) 100000*valueback_fp.fval;
+			return 1;
+			}
+		
+		if ( strcmp(cmd,"FP_CH2_NF")== 0 ) {
+			//writeReg(VR_BASE+FP_CH2_NF,invalue);
+			writeReg(VR_BASE+FP_CH2_NF,invalue_fp.ival);
+			return 0;
+			}
+		if ( strcmp(cmd,"FP_CH2_NF?")== 0 ) {
+			//*value_back = readReg(VR_BASE+FP_CH2_NF);
+			valueback_fp.ival = readReg(VR_BASE+FP_CH2_NF);
+			*value_back = (int) 100000*valueback_fp.fval;
+			return 1;
+			}
+
+		if ( strcmp(cmd,"FP_CH3_NF")== 0 ) {
+			//writeReg(VR_BASE+FP_CH3_NF,invalue);
+			writeReg(VR_BASE+FP_CH3_NF,invalue_fp.ival);
+			return 0;
+			}
+		if ( strcmp(cmd,"FP_CH3_NF?")== 0 ) {
+			//*value_back = readReg(VR_BASE+FP_CH3_NF);
+			valueback_fp.ival = readReg(VR_BASE+FP_CH3_NF);
+			*value_back = (int) 100000*valueback_fp.fval;
+			return 1;
+			}
 
  		if ( strcmp(cmd,"TRIP:CLR")== 0 ) {writeReg(VR_BASE+CLEAR_TRIP,invalue);return 0;}
 
+		if ( strcmp(cmd,"TRIP:THRESH")== 0 ) {
+			writeReg(VR_BASE+TRIP_THRESH,invalue);
+			return 0;
+			}
+		if ( strcmp(cmd,"TRIP:THRESH?")== 0 ) {
+			*value_back = readReg(VR_BASE+TRIP_THRESH);
+			return 1;
+			}
+
+		if ( strcmp(cmd,"TRIP:CYCLES")== 0 ) {
+			writeReg(VR_BASE+TRIP_CYCLES,invalue);
+			return 0;
+			}
+		if ( strcmp(cmd,"TRIP:CYCLES?")== 0 ) {
+			*value_back = readReg(VR_BASE+TRIP_CYCLES);
+			return 1;
+			}
+			
 		
-		// Apr 9 2024
-		if ( strcmp(cmd,"COMB_ALPHA")== 0 ) {writeReg(VR_BASE+COMB_ALPHA_OFFSET,invalue);return 0;}
-		if ( strcmp(cmd,"COMB_ALPHA?")== 0 ) {*value_back = readReg(VR_BASE+COMB_ALPHA_OFFSET);return 1;}
-		
+//		// Apr 9 2024
+//		if ( strcmp(cmd,"COMB_ALPHA")== 0 ) {writeReg(VR_BASE+COMB_ALPHA_OFFSET,invalue);return 0;}
+//		if ( strcmp(cmd,"COMB_ALPHA?")== 0 ) {*value_back = readReg(VR_BASE+COMB_ALPHA_OFFSET);return 1;}
+//		
     	//printf("\n\r Error: Bad command %s \n\r", cmd);
 		
 		}

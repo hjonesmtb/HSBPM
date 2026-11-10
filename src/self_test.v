@@ -3,6 +3,7 @@
  * 1. create 1126 Hz pulse, duty cycle variable. 
  * Shengli Liu, Oct.25,2020
  * 
+ * Removed divide to fix timing issues - HJ Nov 2026
  */
 module Self_Test
     ( 
@@ -22,6 +23,7 @@ module Self_Test
 					 
     parameter CLK_FREQ = 50; //50MHZ 
 	 parameter PERIOD = 16'd44405; //=50MHz/1126 Hz 
+	 parameter PERIOD_div100 = 16'd444; //=50MHz/1126/100 Hz 
 	// parameter PERIOD = 16'd11100; //temporary for testing
 	 
 	 reg [1:0] state; /*synthesis keep*/
@@ -85,11 +87,17 @@ lpm_mul_unsigned	mul_const1 (
 		.result(mul_p1)  //32 bit
 		);	
 
-lpm_div div_const1(
-	.denom(16'd100), //16 bit
-	.numer(mul_p1),  //32 bit
-	.quotient(on_time), //32 bit
-	.remain());        //16 bit
+lpm_mul_unsigned	mul_const2 (
+	.dataa(PERIOD_div100), //16 bit
+	.datab(Dcycle),  //16 bit
+	.result(on_time)  //32 bit
+);	
+		
+//lpm_div div_const1(
+//	.denom(16'd100), //16 bit
+//	.numer(mul_p1),  //32 bit
+//	.quotient(on_time), //32 bit
+//	.remain());        //16 bit
 
 
 	

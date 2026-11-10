@@ -18,7 +18,7 @@ module self_trigger(
 	input clk, //clock is ADC_clk/8 = 2.5 MHz 
 	input reset,
 	output reg no_beam, //
-	output reg gate, //window of the signal above threshold
+	output gate, //window of the signal above threshold
 	output all_trig //one clock pulse
 );
 
@@ -26,10 +26,13 @@ module self_trigger(
 	parameter CLK_T = 400 ;// clk is 2.5Mhz, ~400 ns period 
 	
 	parameter HOLD_TIME_ms = 4; //for CW beam signal, this will make trig every 4 ms.
-   parameter HOLD_TIME = HOLD_TIME_ms*1000000/CLK_T;  // number of clock cycles
-   
+   parameter HOLD_TIME = HOLD_TIME_ms*1000000/CLK_T;  
+
+	parameter GATE_TIME_ms = 1; //Hold gate for 1ms if no beam
+   parameter GATE_TIME = GATE_TIME_ms*1000000/CLK_T; 
+	
 	parameter NO_BEAM_ms = 1000; //ms, if not trig for this period, assert No_beam.
-	parameter NO_BEAM_TIME = NO_BEAM_ms*1000000/CLK_T;   // number of clock cycles
+	parameter NO_BEAM_TIME = NO_BEAM_ms*1000000/CLK_T;   
 	
 	parameter state_idle = 0,
              state_transition = 1, 
@@ -39,27 +42,51 @@ module self_trigger(
 					
 	reg [1:0] state;
 	reg [25:0] cnt, nb_cnt; //26 bit to make sure not overflow
-	reg trig, force_trig;
+	reg trig, force_trig ;
+	
+	reg beam_gate, force_gate;
+	
+	assign gate = no_beam? force_gate : beam_gate;
 
  //trig: real bpm signal above threshold, 
  //force_trig: no beam, fake trig to make the X,Y,SUM,Err looks like alive.
  
 	assign all_trig = trig | force_trig;
 
-always @ (posedge clk)
-  if (no_beam) 
-    begin 
-      if (nb_cnt < HOLD_TIME ) begin force_trig <= 0; nb_cnt <= nb_cnt + 1; end
-      else begin nb_cnt <= 0; force_trig <= 1; end
-	 end	
-  else begin nb_cnt <= 0; force_trig <= 0; end	  
-
+always @ (posedge clk) 
+begin
+	if (no_beam) 
+	begin 
+      if (nb_cnt < HOLD_TIME ) 
+		begin 
+			if(nb_cnt < GATE_TIME) 
+			begin
+				force_gate <= 1;
+			end
+			else force_gate <= 0;
+			
+			force_trig <= 0;
+			nb_cnt <= nb_cnt + 1; 
+		end
+      else begin 
+			nb_cnt <= 0;
+			force_trig <= 1;
+			force_gate <= 1;
+		end
+	end
+	 
+	else begin 
+		nb_cnt <= 0; 
+		force_trig <= 0; 
+		force_gate <= 0; 
+	end	  
+end
 
 always @ (posedge clk)
 begin
 	if(reset) begin
 		state <= state_idle;
-		trig <= 0; gate <= 0;
+		trig <= 0; beam_gate <= 0;
 		cnt <= 0; 
 	end
 	
@@ -73,7 +100,7 @@ begin
 				
 		state_transition:
 			if ((signal > threshold) && (signal[DATA_WIDTH-1] == 0)) 
-			   begin if (cnt >= transition) begin trig <= 1; gate <= 1; state <= state_trig; end	
+			   begin if (cnt >= transition) begin trig <= 1; beam_gate <= 1; state <= state_trig; end	
 				      else cnt <= cnt + 1;
 				end
 			else begin cnt <= 0; state <= state_idle; end
@@ -86,10 +113,10 @@ begin
 		begin 
 			if (cnt < HOLD_TIME) begin 
 		        if ((signal < threshold) | (signal[DATA_WIDTH-1] == 1)) 
-				     begin cnt <= 0; gate <= 0; state <= state_idle;	end
+				     begin cnt <= 0; beam_gate <= 0; state <= state_idle;	end
 		        cnt <= cnt + 1;	
 				end
-			else begin cnt <= 0; gate <= 0; state <= state_idle; end
+			else begin cnt <= 0; beam_gate <= 0; state <= state_idle; end
 		end
 		
 		default:

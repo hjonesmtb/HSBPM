@@ -17,7 +17,7 @@
 //-----------------------------
 
 //parameter FPGA_VERSION_NO = 32'd0047; //verification
-parameter FPGA_VERSION_NO = 32'd20260526; // Modified on May 26 2026
+parameter FPGA_VERSION_NO = 32'd20261110; // Modified on Nov 3 2026
 
 module DE10_NANO_SoC_GHRD(
 
@@ -217,8 +217,9 @@ module DE10_NANO_SoC_GHRD(
 `define 	CAL_DC   configuration[50] // duty cycle of test pulse
 `define 	CAL_AMP  configuration[51] // not used
 
-`define 	COMB_ALPHA {configuration[55],configuration[54],configuration[53],configuration[52]} // alpha for comb filter (0 < alpha < 1)
+`define 	TRIP_CYCLES {configuration[55],configuration[54]} // number of DCLK cycles before a trip is raised, to limit false tripping.
 
+`define 	TRIP_THRESH {configuration[57],configuration[56]} // Trip limit in microns. Compared with beam radius: sqrt(x^2 + y^2)
 //=======================================================
 //  REG/WIRE declarations
 //=======================================================
@@ -248,10 +249,12 @@ pulse_stretcher pulse_stretch_inst(
     .pulse_out(clr_trip_resyn)    // output pulse (25 clocks wide to be visible to DCLK)
 );
 
-BPM_trip trip_gen(
+BPM_trip_circle trip_gen(
    .DCLK(DCLK),   // 2.5 MHz
 	.X_fp(X_fp),
 	.Y_fp(Y_fp),
+	.trip_thresh(`TRIP_THRESH),
+	.trip_cycles(`TRIP_CYCLES), // 
 	.clear_trip(clr_trip_resyn), // reset bpm_ok
 	.tripped_reg(tripped),
 	.bpm_ok(bpm_ok) // 2.5 MHz clock when OK
@@ -466,11 +469,12 @@ parameter integer 	IIR_OUT_K1_ADDR = 47;
 parameter integer 	IIR_OUT_K2_ADDR = 48;
 
 parameter integer 	CLEAR_TRIP_ADDR = 51;
-	
+parameter integer 	TRIP_THRESH_ADDR = 52;
+parameter integer 	TRIP_CYCLES_ADDR = 53;
+
 parameter integer MODULE_ID1_ADDR = 71;
 parameter integer MODULE_ID2_ADDR = 72;
 
-parameter integer COMB_ALPHA_ADDR = 73;	
 
 //===========================  Avalon Bus interface 	============================ 
 soc_system u0(
@@ -574,7 +578,7 @@ soc_system u0(
 
 
 //							================ Configuration Register ===============
-wire [15:0] status_reg = {channel_error[7:0],pll_locked,No_beam};
+wire [15:0] status_reg = {13'b0,tripped,pll_locked,No_beam}; //{channel_error[7:0],pll_locked,No_beam};
 
 //assign GAIN_EN = `CON_REG_L[0];// Change for auto gain control
 wire ATTEN_EN =`CON_REG_L[1]; // gain, attenuation enable for VGA (0 dB, -18 dB)
@@ -744,16 +748,22 @@ always@(posedge SYS_CLK)
 	if ((avalon_addr == MODULE_ID2_ADDR) & (avalon_read_o == 1) ) 
 			dout <= `MODULE_ID2;  	
 	
-	   			 /*   Write/Read to COMB_ALPHA  */
-	if ((avalon_addr == COMB_ALPHA_ADDR) & (avalon_write_o == 1) ) 
-			`COMB_ALPHA <= avalon_writedata; 
-	if ((avalon_addr == COMB_ALPHA_ADDR) & (avalon_read_o == 1) ) 
-			dout <= `COMB_ALPHA;  
-		
 	   			 /*   CLEAR TRIP */
 	if ((avalon_addr == CLEAR_TRIP_ADDR) & (avalon_write_o == 1) ) 
 			clear_trip <= 1;  
 	else  clear_trip <= 0;
+
+	   			 /*   Write/Read to TRIP_THRESH  */
+	if ((avalon_addr == TRIP_THRESH_ADDR) & (avalon_write_o == 1) ) 
+			`TRIP_THRESH <= avalon_writedata[15:0]; 
+	if ((avalon_addr == TRIP_THRESH_ADDR) & (avalon_read_o == 1) ) 
+			dout <= {16'b0,`TRIP_THRESH};  
+			
+	   			 /*   Write/Read to TRIP_CYCLES  */
+	if ((avalon_addr == TRIP_CYCLES_ADDR) & (avalon_write_o == 1) ) 
+			`TRIP_CYCLES <= avalon_writedata[15:0]; 
+	if ((avalon_addr == TRIP_CYCLES_ADDR) & (avalon_read_o == 1) ) 
+			dout <= {16'b0,`TRIP_CYCLES};  
 			
 end //else
 
@@ -915,7 +925,7 @@ channel_block Ch_XY_inst(
  .trig(sfifo_trig), // modified DEC 18 2023. From trig
  .in_valid(in_valid),
  .ena_comb(ena_comb),
- .alpha(`COMB_ALPHA),
+ .alpha(),
  //from fast fifo
  .fast_fifo_full(fast_fifo_full),
  .fast_fifo_empty(fast_fifo_empty),
@@ -962,7 +972,7 @@ alignment align_Y(
 
 wire [SF_WIDTH-1:0] peak_A,peak_B,peak_C,peak_D/*synthesis keep*/; // Slow FIFO values for demodulated envelopes
 wire [SF_WIDTH-1:0] X_fp_decimated,Y_fp_decimated/*synthesis keep*/; // slow FIFO values for beam position
-wire [SF_WIDTH-1:0] X_fp, Y_fp; // uncalibrated beam position (no autocal)
+wire [SF_WIDTH-1:0] X_fp, Y_fp, X_calc_fp, Y_calc_fp; // uncalibrated beam position (no autocal)
 wire [SF_WIDTH-1:0] max_A,max_B,min_A,min_B,max_C,max_D,min_C,min_D/*synthesis keep*/; 
 
 wire maxmin_rst; //for debug use, to clear the maxmin register
@@ -989,15 +999,15 @@ calculate_position cal_position_X(
 	.dead_zone(dead_zone),
 	.decimate(decimate),
 	.flip_sign(flip_sign),
-	.clk_slow2(clk_slow_x),
+	.clk_slow2(), // clk_slow_x
 	.A_comp(peak_A),
 	.B_comp(peak_B),
 	.A_max(max_A),
 	.B_max(max_B),
 	.A_min(min_A),
 	.B_min(min_B),
-	.fp_pos_um_LPF(X_fp), //X_fp
-	.fp_pos_slow(X_fp_decimated)// decimated output - X_fp_pos
+	.fp_pos_um_LPF(X_calc_fp), //X_fp
+	.fp_pos_slow()// X_fp_decimated
 	
     );
 	 
@@ -1023,10 +1033,22 @@ calculate_position cal_position_Y(
 	.B_max(max_D),
 	.A_min(min_C),
 	.B_min(min_D),
-	.fp_pos_um_LPF(Y_fp), //Y_fp
-	.fp_pos_slow(Y_fp_decimated) // decimated output - Y_fp_pos 
+	.fp_pos_um_LPF(Y_calc_fp), //Y_fp
+	.fp_pos_slow() // Y_fp_decimated
 	 
     );
+
+	XY_cic xy_cic_inst (
+		 .clk_fast   (DCLK),
+		 .X_fast_fp  (X_fp),
+		 .Y_fast_fp  (Y_fp),
+		 .clk_slow   (clk_slow_x),
+		 .X_slow_fp  (X_fp_decimated),
+		 .Y_slow_fp  (Y_fp_decimated)
+	);	 
+
+	assign X_fp = No_beam? 0 : X_calc_fp;
+	assign Y_fp = No_beam? 0 : Y_calc_fp;
 	
 	parameter HIST_DEPTH = 123; // 2*123 + 10 = 256
 		
@@ -1089,8 +1111,8 @@ calculate_position cal_position_Y(
 		.wrreq(fifo_wr), //
 		.rdreq(fifo_rd),
 		.q(fast_fifo_dout), // 32 bit
-		.rdfull(fast_fifo_full), //
-		.rdempty(fast_fifo_empty),
+		.wrfull(fast_fifo_full), // .rdfull(fast_fifo_full),
+		.wrempty(fast_fifo_empty), //.rdempty(fast_fifo_empty),
 		.wrusedw(fifo_word) //
 	);
 	
@@ -1132,7 +1154,7 @@ calculate_position cal_position_Y(
 	always @(posedge SCLK)
 		new_gate_last <= new_gate;
 	
-	assign sfifo_trig = ((!new_gate) && new_gate_last) && (!dead_zone); // load sfifo when new_gate is falling, but not when the inputs are being switched.
+	assign sfifo_trig = ((!new_gate) && new_gate_last); // load sfifo when new_gate is falling, but not when the inputs are being switched.
 
 //data packet size is 8 words (32bit)
 	reg [9:0] i_sfifo = 0; // hold 128 samples
@@ -1148,7 +1170,7 @@ calculate_position cal_position_Y(
 		else
 			begin
 				case(p_state) // write 62 words to SFIFO. not working right now. 
-					0:if(sfifo_trig && sfifo_wr_wd <= 256) // changed from 64. 
+					0:if((sfifo_trig) && sfifo_wr_wd <= 256) // Load FIFO when beam is off.
 						begin sFIFO_wr<= 1; sfifo_data_in <= PID; p_state <= 1; end
 					1: begin sfifo_data_in <= {`CON_REG_H,`CON_REG_L,status_reg}; p_state <= free_space? 2 : END_STATE; end
 					2: begin sfifo_data_in <= peak_A; p_state <= free_space? 3 : END_STATE; end

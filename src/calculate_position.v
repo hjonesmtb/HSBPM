@@ -39,8 +39,8 @@ module calculate_position #(parameter SF_WIDTH = 32, parameter DATA_WIDTH = 16)
 	output [SF_WIDTH-1:0] A_min,
 	output [SF_WIDTH-1:0] B_min,
 	
-	output [SF_WIDTH-1:0] fp_pos_um_LPF,
-	output [SF_WIDTH-1:0] fp_pos_slow // changed
+	output signed [SF_WIDTH-1:0] fp_pos_um_LPF, //fp_pos_um_LPF,
+	output signed [SF_WIDTH-1:0] fp_pos_slow//fp_pos_slow // changed
 	
     );
 	 
@@ -64,27 +64,39 @@ reg [SF_WIDTH-1:0] A_scale,B_scale; // calibration values for each channel
 reg [SF_WIDTH-1:0] scale;
  
 always @ (posedge clk_fast) begin
-	
+		scale <= fp100; // new NOV 4
+		
 		if (gate && !dead_zone) begin 
-			A_scale <= fp1;
-			B_scale <= FP_CH2_NF;
+//			A_scale <= fp1;
+//			B_scale <= FP_CH2_NF;
+			
 	
-			A_in <= A_amp;
-			B_in <= B_amp; 	
+//			A_in <= A_amp;
+//			B_in <= B_amp; 	
 			
 			// reverse sign when inputs are swapped
 			// delay not accounted for. May cause glitching/noise.
 			if(flip_sign) begin
-				scale <= fp_neg100; 
+			   A_in <= B_amp;
+				B_in <= A_amp;
+				A_scale <= FP_CH2_NF;
+				B_scale <= fp1;
+				//scale <= fp_neg100; 
+				
 			end
 			else begin
-				scale <= fp100;
+				A_in <= A_amp;
+				B_in <= B_amp;
+				A_scale <= fp1;
+				B_scale <= FP_CH2_NF;
+				//scale <= fp100;
 			end
 		end			
 	end
 
 // create integer version of position
-wire signed [31:0] pos_slow1, pos_slow2, pos_fast;
+wire signed [31:0] pos_slow1, pos_fast, pos_slow2;
+//wire signed [31:0] fp_pos_um_LPF, fp_pos_slow;
 wire clk_slow1;
 altfp_fp2int32 fp2int_inst1(.dataa(fp_pos_um_LPF),.clock(clk_fast),.result(pos_fast));
 

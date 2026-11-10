@@ -67,22 +67,24 @@ wire signed [31:0] ch0_Qout,ch1_Qout,ch2_Qout,ch3_Qout/*synthesis keep*/;
 //NCO core created with clk=20 MHz, output freq = 6.1 MHz, 16 bit resolution.
 //s(nT) = A sin[2πf0*nT + ϕ DITH )], A = 2^16
 parameter PHI_INC_I = 1309965025; //from IP generation result 
-
-NCO NOC_inst (
+wire out_valid;
+nco_fixed NOC_inst (
 			.clk(clk),
 			.clken(1'b1),
 			.reset_n(~rst),
 			.phi_inc_i(PHI_INC_I),
 			.fcos_o(fcos),
 			.fsin_o(fsin),
-			.out_valid());	
+			.out_valid(out_valid));	
 			
 always @ (posedge clk) 
 	begin
-		ch0_data_I <= din_0*fcos; ch0_data_Q <= din_0*fsin;
-		ch1_data_I <= din_1*fcos; ch1_data_Q <= din_1*fsin;
-		ch2_data_I <= din_2*fcos; ch2_data_Q <= din_2*fsin;
-		ch3_data_I <= din_3*fcos; ch3_data_Q <= din_3*fsin;
+		if(out_valid) begin
+			ch0_data_I <= din_0*fcos; ch0_data_Q <= din_0*fsin;
+			ch1_data_I <= din_1*fcos; ch1_data_Q <= din_1*fsin;
+			ch2_data_I <= din_2*fcos; ch2_data_Q <= din_2*fsin;
+			ch3_data_I <= din_3*fcos; ch3_data_Q <= din_3*fsin;
+		end
 	end
 
 //-------------------------------------------------------------------------

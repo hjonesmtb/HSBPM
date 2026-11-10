@@ -12,7 +12,7 @@
 #include "hps_0.h"
 
 //#define FW_VERSION 20230301 //firmware version 
-#define FW_VERSION 20260217 //firmware version 
+#define FW_VERSION 20261105 //firmware version 
 
 #define BUFFER_MAX_SIZE 4000
 #define STRING_MAX_LENGTH 36864
@@ -62,13 +62,15 @@
 
 #define CLEAR_TRIP_ADDR 4*51
 
-#define CH1_ADL5513_OFFSET_ADDR 4*53
-#define CH2_ADL5513_OFFSET_ADDR 4*54
+#define TRIP_THRESH_ADDR 4*52
+#define TRIP_CYCLES_ADDR 4*53
+
+
 
 #define MODULE_ID0_ADDR 4*71
 #define MODULE_ID1_ADDR 4*72	
 
-#define COMB_ALPHA_ADDR 4*73
+//#define COMB_ALPHA_ADDR 4*73
 
 
 
@@ -113,8 +115,9 @@
 #define MODULE_ID1  (( (unsigned long) ALT_LWFPGASLVS_OFST + MYAVALONBUS32_0_BASE + MODULE_ID1_ADDR ) & (unsigned long) (HW_REGS_MASK))
 
 #define CLEAR_TRIP  (( (unsigned long) ALT_LWFPGASLVS_OFST + MYAVALONBUS32_0_BASE + CLEAR_TRIP_ADDR ) & (unsigned long) (HW_REGS_MASK)) 
+#define TRIP_THRESH  (( (unsigned long) ALT_LWFPGASLVS_OFST + MYAVALONBUS32_0_BASE + TRIP_THRESH_ADDR ) & (unsigned long) (HW_REGS_MASK)) 
+#define TRIP_CYCLES  (( (unsigned long) ALT_LWFPGASLVS_OFST + MYAVALONBUS32_0_BASE + TRIP_CYCLES_ADDR ) & (unsigned long) (HW_REGS_MASK)) 
 
-#define COMB_ALPHA_OFFSET  (( (unsigned long) ALT_LWFPGASLVS_OFST + MYAVALONBUS32_0_BASE + COMB_ALPHA_ADDR ) & (unsigned long) (HW_REGS_MASK)) // Apr 9 2024
 
 extern sem_t       buffer_1_sem;
 extern uint8_t*    buffer_1;
