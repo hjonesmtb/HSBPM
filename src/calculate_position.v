@@ -163,7 +163,7 @@ altfp_16int2fp int2fpconv_inst3 (.dataa(OFFSET), .clock(clk_fast), .result(fp_X_
 //compensate gain. 7 clks
 //assign A_comp = A_in;
 altfp_mul mul_inst1 (.dataa(A_fp), .datab(A_scale), .clock(clk_fast), .result(A_comp) ); // Multiply by 1 to avoid clock skew. This could be done by adding a 7 clk delay?
-altfp_mul mul_inst2 (.dataa(B_fp), .datab(B_scale), .clock(clk_fast), .result(B_comp) ); // ajust gain. This could be done in fixed point.
+altfp_mul mul_inst2 (.dataa(B_fp), .datab(B_scale), .clock(clk_fast),  .result(B_comp) ); // ajust gain. This could be done in fixed point.
 
 // delata sigma, 7 clks
 altfp_sub sub_inst1 (.dataa(A_comp), .datab(B_comp), .clock(clk_fast), .result(delta), .zero() ); // Delta. 7 clks

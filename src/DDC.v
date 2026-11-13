@@ -223,12 +223,13 @@ wire overflow1, nan1/*synthesis keep*/;
 wire overflow2, nan2/*synthesis keep*/;
 wire overflow3, nan3/*synthesis keep*/;
 
-always @ (posedge clk) 
+always @ (posedge clk) // from clk 
 	begin
 		ch0_sqsum <= ch0_Iout*ch0_Iout + ch0_Qout*ch0_Qout; 
 		ch1_sqsum <= ch1_Iout*ch1_Iout + ch1_Qout*ch1_Qout; 
 		ch2_sqsum <= ch2_Iout*ch2_Iout + ch2_Qout*ch2_Qout; 
 		ch3_sqsum <= ch3_Iout*ch3_Iout + ch3_Qout*ch3_Qout;
+
 	end
 
 boxfilter_4 bf_inst1(
@@ -260,11 +261,14 @@ assign ch1_sqsum_sel = ena_comb? ch1_sqsum_avg : ch1_sqsum;
 assign ch2_sqsum_sel = ena_comb? ch2_sqsum_avg : ch2_sqsum;
 assign ch3_sqsum_sel = ena_comb? ch3_sqsum_avg : ch3_sqsum;
 
+
+// from clk
 altfp_64int2fp conv_inst0(.dataa(ch0_sqsum_sel), .clock(clk), .result(fp_ch0_sqsum));
 altfp_64int2fp conv_inst1(.dataa(ch1_sqsum_sel), .clock(clk), .result(fp_ch1_sqsum));
 altfp_64int2fp conv_inst2(.dataa(ch2_sqsum_sel), .clock(clk), .result(fp_ch2_sqsum));
 altfp_64int2fp conv_inst3(.dataa(ch3_sqsum_sel), .clock(clk), .result(fp_ch3_sqsum));
 
+// from clk
 altfp_sqrt sqrt_inst0(.data(fp_ch0_sqsum), .clock(clk), .result(fp_ch0_sqrt), .overflow(of0), .nan(nan0));
 altfp_sqrt sqrt_inst1(.data(fp_ch1_sqsum), .clock(clk), .result(fp_ch1_sqrt), .overflow(of1), .nan(nan1));
 altfp_sqrt sqrt_inst2(.data(fp_ch2_sqsum), .clock(clk), .result(fp_ch2_sqrt), .overflow(of2), .nan(nan2));
@@ -286,7 +290,7 @@ assign error = {14'b0,of0|of1|of2|of3,nan0|nan1|nan2|nan3};
 
 reg [SF_WIDTH-1:0] fp_ch0,fp_ch1,fp_ch2,fp_ch3/*synthesis keep*/;
 	
-always @ (posedge clk) 
+always @ (posedge clk)  // from clk
 	begin
 //		fp_ch0_sqrt_sub <= fp_ch0_sqrt_tmp;
 //		fp_ch1_sqrt_sub <= fp_ch1_sqrt_tmp;
@@ -298,10 +302,11 @@ always @ (posedge clk)
 //		fp_ch2 <= agb_2? fp_ch2_sqrt_sub : 32'b0; 
 //		fp_ch3 <= agb_3? fp_ch3_sqrt_sub : 32'b0; 	
 		
-	   fp_ch0 <= fp_ch0_sqrt;
+		fp_ch0 <= fp_ch0_sqrt;
 		fp_ch1 <= fp_ch1_sqrt;
 		fp_ch2 <= fp_ch2_sqrt;
 		fp_ch3 <= fp_ch3_sqrt;	
+
 		
 	end
 
@@ -359,6 +364,7 @@ assign fp_ch2_Amp = fp_ch2_scale;
 assign fp_ch3_Amp = fp_ch3_scale;
 assign fp_ch4_Amp = fp_ch4_scale;
 
+// from clk
 altfp_mul mul_inst0 (.dataa(fp_ch0), .datab(FP_0002), .clock(clk), .result(fp_ch1_scale) );
 altfp_mul mul_inst1 (.dataa(fp_ch1), .datab(FP_0002), .clock(clk), .result(fp_ch2_scale) );
 altfp_mul mul_inst2 (.dataa(fp_ch2), .datab(FP_0002), .clock(clk), .result(fp_ch3_scale) );
